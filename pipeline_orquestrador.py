@@ -31,8 +31,10 @@ def gerar_malha_3d_do_zero(caminho_imagem, nome_personagem):
         "--output-dir", OUT_DIR,
         "--model-save-format", "glb",
     ]
+    env = os.environ.copy()
+    env["PYTHONPATH"] = TRIPOSR_DIR + os.pathsep + env.get("PYTHONPATH", "")
     try:
-        subprocess.run(cmd, check=True, cwd=TRIPOSR_DIR)
+        subprocess.run(cmd, check=True, cwd=TRIPOSR_DIR, env=env)
     except subprocess.CalledProcessError as e:
         print(f"ERRO TripoSR exit {e.returncode}")
         return None
