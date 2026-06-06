@@ -1,0 +1,278 @@
+# -*- coding: utf-8 -*-
+"""
+game_builder — AUTOMATIZACAO MESTRE ULTRA-AVANCADA PARA MODELOS DE IA
+Geracao autonoma de Rigging Corporal, Facial (Shape Keys) e Saias Multicamadas.
+"""
+import bpy, os, json, math
+from mathutils import Vector, Matrix
+
+# ---------------------------------------------------------------------------
+# 1. INGESTAO, LIMPEZA E PADRONIZACAO DA MALHA NEURAL
+# ---------------------------------------------------------------------------
+
+def auto_process_ai_generated_mesh(file_path, character_name="AI_Character", target_height=1.70):
+    if not os.path.exists(file_path):
+        return json.dumps({"err": f"Arquivo nao encontrado: {file_path}"})
+
+    if bpy.context.active_object and bpy.context.active_object.mode != 'OBJECT':
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+    # Limpa o palco para nova importacao
+    for o in list(bpy.context.scene.collection.objects):
+        bpy.data.objects.remove(o, do_unlink=True)
+
+    ext = os.path.splitext(file_path)[-1].lower()
+    if ext in ['.glb', '.gltf']: bpy.ops.import_scene.gltf(filepath=file_path)
+    elif ext == '.obj': bpy.ops.import_scene.obj(filepath=file_path)
+    elif ext == '.fbx': bpy.ops.import_scene.fbx(filepath=file_path)
+
+    meshes = [o for o in bpy.context.scene.collection.objects if o.type == 'MESH']
+    if not meshes: return json.dumps({"err": "Nenhum mesh importado."})
+
+    bpy.ops.object.select_all(action='DESELECT')
+    for m in meshes: m.select_set(True)
+    main_mesh = meshes[0]
+    bpy.context.view_layer.objects.active = main_mesh
+    if len(meshes) > 1: bpy.ops.object.join()
+
+    main_mesh.name = f"{character_name}_Mesh"
+
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.remove_doubles(threshold=0.0001)
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
+    co = [main_mesh.matrix_world @ v.co for v in main_mesh.data.vertices]
+    zs = [p.z for p in co]
+    current_height = max(zs) - min(zs)
+    if current_height > 1e-5:
+        sf = target_height / current_height
+        main_mesh.scale = (sf, sf, sf)
+        bpy.ops.object.transform_apply(scale=True)
+
+    co_updated = [main_mesh.matrix_world @ v.co for v in main_mesh.data.vertices]
+    min_z = min([p.z for p in co_updated])
+    main_mesh.location.z -= min_z
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+
+    return json.dumps({"status": "OK", "mesh_name": main_mesh.name})
+
+# ---------------------------------------------------------------------------
+# 2. CONSTRUCAO DO ESQUELETO INTEGRAL (CORPO, MAOS E ROSTO)
+# ---------------------------------------------------------------------------
+
+def build_complete_skeleton(arm_name="AI_Armature"):
+    amt = bpy.data.armatures.new(f"{arm_name}_Data")
+    arm_obj = bpy.data.objects.new(arm_name, amt)
+    bpy.context.scene.collection.objects.link(arm_obj)
+    bpy.context.view_layer.objects.active = arm_obj
+    bpy.ops.object.mode_set(mode='EDIT')
+
+    bones_def = {
+        "mixamorig:Hips": ((0, 0, 0.9), (0, 0, 1.1), None),
+        "mixamorig:Spine": ((0, 0, 1.1), (0, 0, 1.25), "mixamorig:Hips"),
+        "mixamorig:Spine1": ((0, 0, 1.25), (0, 0, 1.42), "mixamorig:Spine"),
+        "mixamorig:Neck": ((0, 0, 1.42), (0, 0, 1.52), "mixamorig:Spine1"),
+        "mixamorig:Head": ((0, 0, 1.52), (0, 0, 1.75), "mixamorig:Neck"),
+        "mixamorig:Jaw": ((0, 0.02, 1.54), (0, 0.09, 1.52), "mixamorig:Head"),
+        "mixamorig:Eye_L": ((-0.035, 0.06, 1.64), (-0.035, 0.10, 1.64), "mixamorig:Head"),
+        "mixamorig:Eye_R": ((0.035, 0.06, 1.64), ((0.035, 0.10, 1.64)), "mixamorig:Head"),
+    }
+
+    for side, sign in [("Left", -1), ("Right", 1)]:
+        bones_def.update({
+            f"mixamorig:{side}UpLeg": ((sign * 0.09, 0, 0.9), (sign * 0.10, 0, 0.5), "mixamorig:Hips"),
+            f"mixamorig:{side}Leg": ((sign * 0.10, 0, 0.5), (sign * 0.11, -0.02, 0.1), f"mixamorig:{side}UpLeg"),
+            f"mixamorig:{side}Foot": ((sign * 0.11, -0.02, 0.1), (sign * 0.11, 0.12, 0.0), f"mixamorig:{side}Leg"),
+
+            f"mixamorig:{side}Shoulder": ((0, 0, 1.40), (sign * 0.14, 0, 1.42), "mixamorig:Spine1"),
+            f"mixamorig:{side}Arm": ((sign * 0.14, 0, 1.42), (sign * 0.36, -0.01, 1.40), f"mixamorig:{side}Shoulder"),
+            f"mixamorig:{side}ForeArm": ((sign * 0.36, -0.01, 1.40), (sign * 0.54, -0.03, 1.38), f"mixamorig:{side}Arm"),
+            f"mixamorig:{side}Hand": ((sign * 0.54, -0.03, 1.38), (sign * 0.61, -0.04, 1.36), f"mixamorig:{side}ForeArm"),
+        })
+
+        for f_idx, finger in enumerate(["Thumb", "Index", "Middle", "Ring", "Pinky"]):
+            offset_y = (f_idx - 2) * 0.012
+            p0 = Vector((sign * 0.61, -0.04 + offset_y, 1.36))
+            last_p = f"mixamorig:{side}Hand"
+            for ph in ["1", "2", "3"]:
+                p1 = p0 + Vector((sign * 0.022, 0, -0.003))
+                b_name = f"mixamorig:{side}Hand{finger}{ph}"
+                bones_def[b_name] = (p0.copy(), p1.copy(), last_p)
+                last_p = b_name; p0 = p1.copy()
+
+    for name, (head, tail, parent) in bones_def.items():
+        eb = amt.edit_bones.new(name)
+        eb.head = head; eb.tail = tail
+        if parent: eb.parent = amt.edit_bones.get(parent)
+
+    bpy.ops.object.mode_set(mode='OBJECT')
+    return arm_obj
+
+# ---------------------------------------------------------------------------
+# 3. CRIACAO DE SAIA MULTICAMADAS E DISTRIBUICAO FISICA DE PESOS
+# ---------------------------------------------------------------------------
+
+def apply_skirt_layers_and_weighting(mesh_name, arm_name, layers=3, bones_per_ring=8):
+    arm = bpy.data.objects.get(arm_name); mesh = bpy.data.objects.get(mesh_name)
+    if not arm or not mesh: return
+
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode='EDIT')
+
+    skirt_bones = []
+    base_z, height = 0.9, 0.65
+
+    for lyr in range(layers):
+        radius = 0.14 + (lyr * 0.09)
+        for b in range(bones_per_ring):
+            angle = (b / bones_per_ring) * 2 * math.pi
+            x = math.cos(angle) * radius
+            y = math.sin(angle) * radius
+            parent = "mixamorig:Hips"
+
+            segments = 3
+            z_step = height / segments
+            for seg in range(segments):
+                b_name = f"skirt_L{lyr}_R{b}_S{seg}"
+                eb = arm.data.edit_bones.new(b_name)
+                z_start = base_z - (seg * z_step)
+                z_end = base_z - ((seg + 1) * z_step)
+                flare = 1.0 + (seg * 0.25)
+
+                eb.head = Vector((x * flare, y * flare, z_start))
+                eb.tail = Vector((x * (flare + 0.1), y * (flare + 0.1), z_end))
+                eb.parent = arm.data.edit_bones.get(parent)
+                parent = b_name
+                skirt_bones.append(b_name)
+
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    bpy.context.view_layer.objects.active = mesh
+    for b_name in skirt_bones:
+        vg = mesh.vertex_groups.get(b_name) or mesh.vertex_groups.new(name=b_name)
+        bone = arm.data.bones.get(b_name)
+        b_head = arm.matrix_world @ bone.head_local
+
+        for v in mesh.data.vertices:
+            v_w = mesh.matrix_world @ v.co
+            if abs(v_w.z - b_head.z) < 0.12:
+                dist = (v_w - b_head).length
+                if dist < 0.15:
+                    weight = (1.0 - (dist / 0.15)) * 0.85
+                    vg.add([v.index], weight, 'REPLACE')
+
+# ---------------------------------------------------------------------------
+# 4. CONSTRUTOR PROCEDURAL DE EXPRESSOES FACIAIS (SHAPE KEYS AUTOMATICAS)
+# ---------------------------------------------------------------------------
+
+def apply_facial_shape_keys(mesh_name):
+    mesh = bpy.data.objects.get(mesh_name)
+    if not mesh: return
+
+    bpy.context.view_layer.objects.active = mesh
+    if not mesh.data.shape_keys:
+        mesh.shape_key_add(name="Basis")
+
+    sk_mouth = mesh.shape_key_add(name="Mouth_Open")
+    sk_blink_l = mesh.shape_key_add(name="Blink_L")
+    sk_blink_r = mesh.shape_key_add(name="Blink_R")
+
+    mouth_center = Vector((0, 0.08, 1.58))
+    eye_l_center = Vector((-0.035, 0.06, 1.64))
+    eye_r_center = Vector((0.035, 0.06, 1.64))
+
+    for idx, v in enumerate(mesh.data.vertices):
+        co_w = mesh.matrix_world @ v.co
+
+        if (co_w - mouth_center).length < 0.045 and co_w.z < mouth_center.z:
+            sk_mouth.data[idx].co.z -= 0.025
+            sk_mouth.data[idx].co.y += 0.005
+
+        if (co_w - eye_l_center).length < 0.028:
+            if co_w.z > eye_l_center.z:
+                sk_blink_l.data[idx].co.z -= 0.012
+
+        if (co_w - eye_r_center).length < 0.028:
+            if co_w.z > eye_r_center.z:
+                sk_blink_r.data[idx].co.z -= 0.012
+
+# ---------------------------------------------------------------------------
+# 5. LIMITADORES ANATOMICOS, HELPERS DE OMBRO E FISICA JIGGLE
+# ---------------------------------------------------------------------------
+
+def setup_fine_hand_rig(arm_name):
+    arm = bpy.data.objects.get(arm_name)
+    if not arm: return
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode='POSE')
+    for side in ["Left", "Right"]:
+        for f in ["Thumb", "Index", "Middle", "Ring", "Pinky"]:
+            for ph in ["1", "2", "3"]:
+                pb = arm.pose.bones.get(f"mixamorig:{side}Hand{f}{ph}")
+                if pb:
+                    c = pb.constraints.new('LIMIT_ROTATION')
+                    c.use_limit_x = c.use_limit_y = c.use_limit_z = True
+                    c.owner_space = 'LOCAL'
+                    if f == "Thumb":
+                        c.min_x, c.max_x, c.min_y, c.max_y, c.min_z, c.max_z = -0.2, 0.9, -0.2, 0.2, -0.3, 0.3
+                    else:
+                        c.min_x, c.max_x, c.min_y, c.max_y, c.min_z, c.max_z = 0.0, 1.4, -0.01, 0.01, -0.01, 0.01
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+def setup_shoulder_sleeve_helpers(mesh_name, arm_name):
+    mesh = bpy.data.objects.get(mesh_name); arm = bpy.data.objects.get(arm_name)
+    bpy.context.view_layer.objects.active = arm; bpy.ops.object.mode_set(mode='EDIT')
+    for side in ["L", "R"]:
+        ref = f"mixamorig:{'Left' if side=='L' else 'Right'}Arm"
+        if ref in arm.data.edit_bones:
+            eb = arm.data.edit_bones.new(f"helper_shoulder_{side}")
+            eb.head = arm.data.edit_bones[ref].head.copy()
+            eb.tail = eb.head + Vector((0, 0, 0.08))
+            eb.parent = arm.data.edit_bones[ref].parent
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+def setup_secondary_dynamics_rig(arm_name, mesh_name):
+    arm = bpy.data.objects.get(arm_name); mesh = bpy.data.objects.get(mesh_name)
+    bpy.context.view_layer.objects.active = arm; bpy.ops.object.mode_set(mode='EDIT')
+    spine1 = arm.data.edit_bones.get("mixamorig:Spine1")
+    if spine1:
+        for s in ["L", "R"]:
+            sign = -1 if s == "L" else 1
+            eb = arm.data.edit_bones.new(f"dyn_breast_{s}")
+            eb.head = spine1.head + Vector((sign * 0.12, 0.10, 0.05))
+            eb.tail = eb.head + Vector((0, 0.08, 0))
+            eb.parent = spine1
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+# ---------------------------------------------------------------------------
+# 6. FUNCAO DISPATCHER MESTRE DE UM CLIQUE
+# ---------------------------------------------------------------------------
+
+def execute_ultimate_pipeline(generated_file_path, character_name="Alice_Perfeita"):
+    res = json.loads(auto_process_ai_generated_mesh(generated_file_path, character_name))
+    if "err" in res: return json.dumps(res)
+    mesh_name = res["mesh_name"]
+
+    arm_obj = build_complete_skeleton(f"Rig_{character_name}")
+    arm_name = arm_obj.name
+
+    apply_skirt_layers_and_weighting(mesh_name, arm_name, layers=3, bones_per_ring=8)
+
+    bpy.ops.object.select_all(action='DESELECT')
+    mesh_obj = bpy.data.objects[mesh_name]
+    mesh_obj.select_set(True); arm_obj.select_set(True)
+    bpy.context.view_layer.objects.active = arm_obj
+    bpy.ops.object.parent_set(type='ARMATURE_AUTO')
+
+    apply_facial_shape_keys(mesh_name)
+
+    setup_fine_hand_rig(arm_name)
+    setup_shoulder_sleeve_helpers(mesh_name, arm_name)
+    setup_secondary_dynamics_rig(arm_name, mesh_name)
+
+    return json.dumps({
+        "status": "SUCESSO_ABSOLUTO",
+        "mensagem": "Corpo rigado, dedos travados, saia separada por camadas fisicas e rosto pronto para animacao de fala e piscar!"
+    })
