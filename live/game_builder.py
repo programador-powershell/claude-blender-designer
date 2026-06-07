@@ -1746,3 +1746,143 @@ def universal_accessory_slicer(mesh_name, armature_name, masks_directory, base_p
             bpy.ops.object.mode_set(mode='OBJECT')
         bpy.data.images.remove(mask_img)
     return json.dumps({"status": "OK", "separated": separated})
+
+
+# ===========================================================================
+# AAA layered pipeline: clean base mesh + proportional mold + dress isolation
+# + data-transfer weight binding (replaces manual painting).
+# ===========================================================================
+
+DEFAULT_BASE_TEMPLATE = r"D:/Alice/tools/auto-rig-fix/work/alice_rigged.fbx"
+
+def load_clean_base_mesh(template_path=None):
+    """Importa malha anatomica perfeita pre-rigada. Retorna (body_mesh, armature)."""
+    template_path = template_path or DEFAULT_BASE_TEMPLATE
+    if not os.path.exists(template_path):
+        raise FileNotFoundError(f"base anatomico nao encontrado: {template_path}")
+    existing = set(bpy.data.objects)
+    if template_path.endswith('.fbx'):
+        bpy.ops.import_scene.fbx(filepath=template_path)
+    elif template_path.endswith('.blend'):
+        with bpy.data.libraries.load(template_path, link=False) as (data_from, data_to):
+            data_to.objects = data_from.objects
+        for o in data_to.objects:
+            if o is not None:
+                bpy.context.scene.collection.objects.link(o)
+    elif template_path.endswith('.glb') or template_path.endswith('.gltf'):
+        bpy.ops.import_scene.gltf(filepath=template_path)
+    new_objs = set(bpy.data.objects) - existing
+    base_body = None
+    base_armature = None
+    for o in new_objs:
+        if o.type == 'MESH' and base_body is None:
+            base_body = o
+            base_body.name = "Base_Body"
+        elif o.type == 'ARMATURE' and base_armature is None:
+            base_armature = o
+            base_armature.name = "Base_Armature"
+    return base_body, base_armature
+
+def match_proportions(ai_mesh_obj, base_armature_obj):
+    """Mede bbox do AI mesh e escala armature base p/ encaixar (uniforme p/ evitar squash)."""
+    from mathutils import Vector
+    ai_bbox = [ai_mesh_obj.matrix_world @ Vector(c) for c in ai_mesh_obj.bound_box]
+    ai_dim = Vector((max(v.x for v in ai_bbox) - min(v.x for v in ai_bbox),
+                     max(v.y for v in ai_bbox) - min(v.y for v in ai_bbox),
+                     max(v.z for v in ai_bbox) - min(v.z for v in ai_bbox)))
+    base_bbox = [base_armature_obj.matrix_world @ Vector(c) for c in base_armature_obj.bound_box]
+    base_dim = Vector((max(v.x for v in base_bbox) - min(v.x for v in base_bbox),
+                       max(v.y for v in base_bbox) - min(v.y for v in base_bbox),
+                       max(v.z for v in base_bbox) - min(v.z for v in base_bbox)))
+    sz = ai_dim.z / base_dim.z if base_dim.z > 1e-5 else 1.0
+    base_armature_obj.scale = (sz, sz, sz)
+    bpy.context.view_layer.objects.active = base_armature_obj
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    return {"scale_uniform": round(sz, 4),
+            "ai_dim": [round(v, 3) for v in ai_dim],
+            "base_dim": [round(v, 3) for v in base_dim]}
+
+def optimize_clothing_interior(clothing_mesh_name, solidify_thickness=0.002, smooth_iters=2):
+    """Solidify + Smooth pra dar volume de tecido e limpar ruido geometrico do Hunyuan."""
+    obj = bpy.data.objects.get(clothing_mesh_name)
+    if not obj:
+        return
+    for m in list(obj.modifiers):
+        if m.name in ("Cloth_Thickness", "Cloth_Surface_Smooth"):
+            obj.modifiers.remove(m)
+    sol = obj.modifiers.new("Cloth_Thickness", 'SOLIDIFY')
+    sol.thickness = solidify_thickness
+    sol.use_even_offset = True
+    sm = obj.modifiers.new("Cloth_Surface_Smooth", 'SMOOTH')
+    sm.factor = 0.5
+    sm.iterations = smooth_iters
+
+def professional_layer_binding(base_body_name, clothing_mesh_name):
+    """Data Transfer pesos perna/joelho base -> vestido. Armature copiado + Collision no base."""
+    body = bpy.data.objects.get(base_body_name)
+    cloth = bpy.data.objects.get(clothing_mesh_name)
+    if not body or not cloth:
+        return json.dumps({"err": "camadas ausentes"})
+    body_arm_mod = next((m for m in body.modifiers if m.type == 'ARMATURE'), None)
+    if not body_arm_mod or not body_arm_mod.object:
+        return json.dumps({"err": "base body sem Armature modifier"})
+    for m in list(cloth.modifiers):
+        if m.type == 'ARMATURE' and m.name in ("Armature", "Armature_Binding"):
+            cloth.modifiers.remove(m)
+    arm_mod = cloth.modifiers.new("Armature_Binding", 'ARMATURE')
+    arm_mod.object = body_arm_mod.object
+    for m in list(cloth.modifiers):
+        if m.name == "AAA_Weight_Transfer":
+            cloth.modifiers.remove(m)
+    dt = cloth.modifiers.new("AAA_Weight_Transfer", 'DATA_TRANSFER')
+    dt.object = body
+    dt.use_vert_data = True
+    dt.data_types_verts = {'VGROUP_WEIGHTS'}
+    dt.vert_mapping = 'NEAREST'
+    bpy.context.view_layer.objects.active = cloth
+    try:
+        bpy.ops.object.datalayout_transfer(modifier="AAA_Weight_Transfer")
+    except Exception:
+        pass
+    bpy.ops.object.modifier_apply(modifier="AAA_Weight_Transfer")
+    if not any(m.type == 'COLLISION' for m in body.modifiers):
+        body.modifiers.new("Body_Collision", 'COLLISION')
+        try:
+            body.collision.thickness_outer = 0.005
+        except Exception:
+            pass
+    return json.dumps({"bound": cloth.name,
+                       "armature": body_arm_mod.object.name,
+                       "vgroups_transferred": len(cloth.vertex_groups)})
+
+def compile_professional_character_pipeline(ai_glb_path, template_path=None, masks_dir=None,
+                                             clean_scene=True):
+    """Orquestracao AAA: AI GLB -> base humano limpo -> molde proporcional -> slice acessorios
+    -> isolar vestido -> data transfer pesos."""
+    if clean_scene:
+        for o in list(bpy.data.objects):
+            bpy.data.objects.remove(o, do_unlink=True)
+    bpy.ops.import_scene.gltf(filepath=ai_glb_path)
+    ai_meshes = [o for o in bpy.context.selected_objects if o.type == 'MESH']
+    if not ai_meshes:
+        return json.dumps({"err": "GLB sem mesh"})
+    ai_mesh = ai_meshes[0]
+    ai_mesh.name = "AI_Mesh_Mold"
+    base_body, base_arm = load_clean_base_mesh(template_path)
+    if not base_body or not base_arm:
+        return json.dumps({"err": "base humano nao carregou"})
+    prop = match_proportions(ai_mesh, base_arm)
+    sliced = []
+    if masks_dir and os.path.exists(masks_dir):
+        r = json.loads(universal_accessory_slicer(ai_mesh.name, base_arm.name, masks_dir, "alice"))
+        sliced = r.get("separated", [])
+    ai_mesh.name = "Camada_Vestido_Principal"
+    optimize_clothing_interior(ai_mesh.name)
+    bind = json.loads(professional_layer_binding(base_body.name, ai_mesh.name))
+    return json.dumps({"status": "OK",
+                       "base": base_body.name,
+                       "arm": base_arm.name,
+                       "scale": prop,
+                       "sliced": sliced,
+                       "binding": bind,
+                       "vestido": ai_mesh.name})
