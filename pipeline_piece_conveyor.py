@@ -305,28 +305,20 @@ def conveyor(outfit, piece):
         save_status(st)
         score = q.get('overall_score', 0)
         if score >= TARGET_SCORE:
-            log(f"  ACCEPTED (score {score})")
+            log(f"  ACCEPTED 10/10 (score {score})")
             st['pieces'][pkey]['accepted'] = True
             st['pieces'][pkey]['final_iter'] = iter_n
             save_status(st)
             return True
-        # Plateau detect: if last PLATEAU_LIMIT iters no improvement, accept best
-        recent = [h['qwen'].get('overall_score',0) for h in history[-PLATEAU_LIMIT:]]
-        if len(recent) >= PLATEAU_LIMIT and max(recent) == recent[-1] == recent[0]:
-            log(f"  PLATEAU ({recent}) - accepting best score {score}")
-            st['pieces'][pkey]['accepted'] = True
-            st['pieces'][pkey]['final_iter'] = iter_n
-            st['pieces'][pkey]['reason'] = 'plateau'
-            save_status(st)
-            return True
-        # AUTO-TUNE
+        # AUTO-TUNE (no plateau accept - must hit 10)
         tune = auto_tune(tune, q.get('next_action'), tune, iter_n=iter_n)
-    # Max iters reached - accept best anyway (autonomous mode)
-    log(f"  MAX ITERS - accepting best score {st['pieces'][pkey]['best_score']}")
-    st['pieces'][pkey]['accepted'] = True
-    st['pieces'][pkey]['reason'] = 'max_iters'
+    # Max iters reached WITHOUT 10/10 - mark FAILED, do not block esteira
+    log(f"  FAILED after {MAX_ITERS} iters - best_score={st['pieces'][pkey]['best_score']} (sem 10)")
+    st['pieces'][pkey]['accepted'] = False
+    st['pieces'][pkey]['failed'] = True
+    st['pieces'][pkey]['reason'] = 'no_10_after_max_iters'
     save_status(st)
-    return True
+    return False
 
 def main():
     ap = argparse.ArgumentParser()
@@ -341,9 +333,16 @@ def main():
         reg = json.load(open(REGISTRY, encoding='utf-8'))
         cfg = reg['outfits'][a.outfit]
         manifest = json.load(open(os.path.join(MANIFESTS_DIR, cfg['manifest']), encoding='utf-8'))
+        results = {'accepted': [], 'failed': []}
         for p in sorted(manifest['pieces'], key=lambda x: x['order']):
             ok = conveyor(a.outfit, p['name'])
-            if not ok: log(f"FAIL on {p['name']} - stopping")
+            (results['accepted'] if ok else results['failed']).append(p['name'])
+        # Final report
+        log(f"\n===== FINAL REPORT =====")
+        log(f"ACCEPTED 10/10: {len(results['accepted'])}/{len(manifest['pieces'])}")
+        for n in results['accepted']: log(f"  + {n}")
+        log(f"FAILED (sem 10): {len(results['failed'])}/{len(manifest['pieces'])}")
+        for n in results['failed']: log(f"  - {n}")
         return
     ap.error("--piece or --all required")
 

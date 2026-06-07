@@ -271,6 +271,10 @@ def attach_garment_to_body(obj_name, body_name='Alice_Base_Body', armature_name=
         col = body.modifiers.new('PA_body_col','COLLISION')
         try: col.settings.thickness_outer = 0.012
         except Exception: pass
+    # 4.5 Parent obj to armature (object hierarchy + transforma com rig)
+    if obj.parent != arm:
+        obj.parent = arm
+        obj.matrix_parent_inverse = arm.matrix_world.inverted()
     # 5. Cloth sim opcional (saias/mangas)
     if enable_cloth and not any(m.type=='CLOTH' for m in obj.modifiers):
         # Pin top vertices (waist anchor)
