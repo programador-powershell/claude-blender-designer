@@ -180,7 +180,7 @@ def build_blueprint_for(outfit_name: str) -> OutfitBlueprint:
             else:
                 rx, ry = 0.22, 0.16
             params = {'crop_path': crop_path, 'z_top': z[1], 'z_bot': z[0],
-                      'rx': rx, 'ry': ry, 'segments': 24, 'front_only': True}
+                      'rx': rx, 'ry': ry, 'segments': 32, 'front_only': False}
             pieces.append(GarmentPiece(name, lvl.lower(), order, mat, 'image_projected',
                                        anchors, 'fitted', 0.002, params=params))
             continue

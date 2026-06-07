@@ -137,31 +137,24 @@ def _find_armature(character_name=None):
     return arms[0] if arms else None
 
 def _image_projected_shell(name, crop_path, z_top, z_bot, rx, ry, segments, coll,
-                            front_only=True):
-    """Shell cilindrico/curvo com UV front-projection + textura RGBA do crop Florence2.
-    Geometria minima — visual vem da textura real do step image (fidelidade pixel-perfect).
-    front_only=True: shell so na frente (y<0), back fica transparent.
-    """
-    verts=[]; faces=[]; uvs_per_face=[]
+                            front_only=False):
+    """Shell cilindrico 360 graus + UV mirror-wrap + textura RGBA do crop Florence2.
+    Geometria 360: front (y<0) usa textura, back (y>0) mirror-wraps mesma textura.
+    UV: U=0 atras esq -> 0.5 frente meio -> 1.0 atras dir (full wrap)."""
+    verts=[]; faces=[]
     rings=10
-    seg = segments if not front_only else max(segments // 2, 8)
-    # Front arc: ang -pi/2 ate pi/2 (frente do corpo, y<0)
-    a_start = math.pi if front_only else 0
-    a_end   = 2*math.pi if front_only else 2*math.pi
-    a_span  = a_end - a_start
+    seg = segments
     for r in range(rings+1):
         t = r/rings
         z = z_top*(1-t) + z_bot*t
-        v_uv = t  # UV V coord (top=0, bot=1)
-        for i in range(seg+1 if front_only else seg):
-            a = a_start + a_span * (i / seg if front_only else i / seg)
-            x = rx * math.cos(a)
-            y = ry * math.sin(a)
+        for i in range(seg):
+            a = 2*math.pi * (i / seg)
+            x = rx * math.cos(a); y = ry * math.sin(a)
             verts.append((x, y, z))
-    cols = (seg+1) if front_only else seg
+    cols = seg
     for r in range(rings):
-        for i in range(seg if front_only else seg):
-            i_next = (i+1) if front_only else (i+1)%seg
+        for i in range(seg):
+            i_next = (i+1) % seg
             v00 = r*cols+i; v01 = r*cols+i_next
             v10 = (r+1)*cols+i; v11 = (r+1)*cols+i_next
             faces.append((v00, v01, v11, v10))
@@ -169,14 +162,21 @@ def _image_projected_shell(name, crop_path, z_top, z_bot, rx, ry, segments, coll
     me = bpy.data.meshes.new(name+'_Mesh'); me.from_pydata(verts, [], faces); me.update()
     obj = bpy.data.objects.new(name, me); bpy.context.collection.objects.link(obj)
     _link(obj, coll)
-    # UV layer: u from horizontal pos in arc, v from vertical
-    uv_layer = me.uv_layers.new(name="UV_FrontProj")
+    # UV layer 360 wrap: ang 0 (right) -> u=0.5, ang pi (left back) -> u=0, ang 2pi (right back) -> u=1
+    # Use mirror so front-half (y<0) maps to full UV, back-half mirrors
+    uv_layer = me.uv_layers.new(name="UV_FullWrap")
     poly_loop_idx = 0
     for poly in me.polygons:
         for vi in poly.vertices:
             row = vi // cols
             col = vi % cols
-            u = col / max(seg, 1)
+            ang = 2*math.pi * (col / max(seg, 1))   # 0..2pi
+            # Mirror ang->u: front (ang in [pi/2..3pi/2]) maps to u=0..1, back mirrors
+            # Compute signed y: ang=pi/2 -> y>0 back, ang=3pi/2 -> y<0 front
+            y_sign = math.sin(ang)
+            # u: front = (sin(ang)+1)/2 inverted; use cos for symmetry
+            # Use abs(cos(ang)*0.5+0.5) wrap: ang=0 (right) -> u=1, ang=pi (left) -> u=0
+            u = (math.cos(ang) + 1.0) * 0.5
             v = row / max(rings, 1)
             uv_layer.data[poly_loop_idx].uv = (u, v)
             poly_loop_idx += 1
