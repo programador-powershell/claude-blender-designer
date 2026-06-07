@@ -198,20 +198,34 @@ print('RENDERED:', files)
         except: pass
 
 
-def qwen_score_fit(render_path, ref_crop, piece):
-    """Phase 2 gate. Score render fit vs ref."""
+def qwen_score_fit(render_path, ref_crop, piece, inspectors=None):
+    """Phase 2 gate. Score render fit vs ref + multi-aspect cv2 inspectors."""
+    insp_text = ""
+    if inspectors:
+        insp_text = f"""
+cv2 inspectors metrics (objective):
+  ssim={inspectors.get('ssim')} edge_overlap={inspectors.get('edge_overlap')}
+  shadow_match={inspectors.get('shadow_match')} texture_match={inspectors.get('texture_match')}
+  color_corr={inspectors.get('color_corr')} hue_diff={inspectors.get('hue_diff')}
+  light_match={inspectors.get('light_match')} mean_diff={inspectors.get('mean_diff')}
+"""
+    # Use inspectors grid if available else render
+    img_path = inspectors['grid'] if inspectors and inspectors.get('grid') else render_path
     payload = {
         "model": "qwen3-vl",
         "messages": [{"role":"user","content":[
-            {"type":"image_url","image_url":{"url":f"data:image/png;base64,{b64(render_path)}"}},
+            {"type":"image_url","image_url":{"url":f"data:image/png;base64,{b64(img_path)}"}},
             {"type":"image_url","image_url":{"url":f"data:image/png;base64,{b64(ref_crop)}"}},
-            {"type":"text","text":f"""Fit validation 3D render for piece \"{piece}\".
-Img1: rendered 3D Blender result (piece on Alice).
-Img2: reference photo crop of piece.
-Score 0-10: does 3D result MATCH ref in shape/position/size/proportion?
-JSON ONLY: {{"shape":0-10,"position":0-10,"size":0-10,"overall":0-10,"perfect":false,"issue":"<short>"}}
-perfect=true ONLY if overall==10."""}
-        ]}], "max_tokens": 150, "temperature": 0.0
+            {"type":"text","text":f"""Fit validation per piece \"{piece}\".
+Img1: 3x3 inspector grid (render, ref, overlay_red, overlay_green, lines, shadow, texture, palette, lights).
+Img2: reference photo crop.
+{insp_text}
+Score 0-10 EACH aspect: shape, position, size, lines, shadows, textures, colors, lights, overlay_match.
+JSON ONLY: {{"shape":0-10,"position":0-10,"size":0-10,"lines":0-10,"shadows":0-10,
+"textures":0-10,"colors":0-10,"lights":0-10,"overlay_match":0-10,"overall":0-10,
+"perfect":false,"weak_aspects":["aspect1","aspect2"],"issue":"<short>"}}
+perfect=true ONLY if ALL aspects==10."""}
+        ]}], "max_tokens": 280, "temperature": 0.0
     }
     r = qwen_query(payload)
     if not r: return {"overall": 0, "_err": "qwen_dead"}
@@ -295,10 +309,19 @@ def perfection_one_piece(cfg, piece, fl_prompts):
         renders = render_views(name)
         if not renders or not os.path.exists(renders[0]):
             print(f"    render fail"); continue
+        # Run 6 cv2 inspectors (overlay/lines/shadow/texture/colors/lights)
+        from cv2_inspectors import run_all_inspectors
+        insp = run_all_inspectors(renders[0], ref_crop,
+                                    os.path.join(WORK, "inspectors_grid", name), name)
+        if insp:
+            print(f"    inspectors: ssim={insp['ssim']} edges={insp['edge_overlap']} "
+                  f"shadow={insp['shadow_match']} texture={insp['texture_match']} "
+                  f"color={insp['color_corr']} light={insp['light_match']}")
         t0 = time.time()
-        q = qwen_score_fit(renders[0], ref_crop, name)
+        q = qwen_score_fit(renders[0], ref_crop, name, inspectors=insp)
         score = q.get('overall', 0)
-        print(f"    [Qwen {time.time()-t0:.0f}s] fit_score={score} perfect={q.get('perfect')} issue={q.get('issue','?')}")
+        weak = q.get('weak_aspects', [])
+        print(f"    [Qwen {time.time()-t0:.0f}s] fit_score={score} perfect={q.get('perfect')} weak={weak} issue={q.get('issue','?')}")
         if score > best_fit_score:
             best_fit_score = score; best_solidify = sld; best_objs = list(created)
         if score >= TARGET_SCORE and q.get('perfect'):
