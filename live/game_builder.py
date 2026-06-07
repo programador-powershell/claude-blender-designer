@@ -2174,3 +2174,168 @@ def compile_complex_layered_character(glb_path, template_path=None, masks_dir=No
                        "armature": base_arm.name,
                        "scale": prop,
                        "layers_created": created})
+
+
+def build_aaa_layered_character(glb_path, body_fbx_path, masks_dir,
+                                  base_prefix="alice", scene_name="RigLab"):
+    """Fatia molde IA usando masks SAM, ordena Inside-Out por area, aplica
+    Shrinkwrap+Data Transfer progressivo. Camada1=vestido / Camada2=harness(offset 2.5mm) /
+    Camada3+=props rigidos no osso proximo."""
+    import bmesh, glob
+    from mathutils import Vector
+
+    if not os.path.exists(glb_path) or not os.path.exists(body_fbx_path):
+        return json.dumps({"err": f"Caminhos invalidos: {glb_path} ou {body_fbx_path}"})
+
+    sc = _use_scene(scene_name)
+    reset_world()
+
+    before_ai = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=glb_path)
+    new_ai = [o for o in bpy.data.objects if o not in before_ai]
+    ai_mesh = next((o for o in new_ai if o.type == 'MESH'), None)
+    if not ai_mesh:
+        return json.dumps({"err": "GLB sem mesh"})
+    ai_mesh.name = "AI_Raw_Mold"
+
+    before_body = set(bpy.data.objects)
+    bpy.ops.import_scene.fbx(filepath=body_fbx_path)
+    new_body = [o for o in bpy.data.objects if o not in before_body]
+    base_body = next((o for o in new_body if o.type == 'MESH'), None)
+    base_armature = next((o for o in new_body if o.type == 'ARMATURE'), None)
+    if not base_body or not base_armature:
+        return json.dumps({"err": "Template precisa Mesh + ARMATURE"})
+    base_armature.name = f"Rig_{base_prefix}"
+
+    ai_bbox = [ai_mesh.matrix_world @ Vector(c) for c in ai_mesh.bound_box]
+    ai_dim = Vector((max(v.x for v in ai_bbox) - min(v.x for v in ai_bbox),
+                     max(v.y for v in ai_bbox) - min(v.y for v in ai_bbox),
+                     max(v.z for v in ai_bbox) - min(v.z for v in ai_bbox)))
+    base_bbox = [base_armature.matrix_world @ Vector(c) for c in base_armature.bound_box]
+    base_dim = Vector((max(v.x for v in base_bbox) - min(v.x for v in base_bbox),
+                       max(v.y for v in base_bbox) - min(v.y for v in base_bbox),
+                       max(v.z for v in base_bbox) - min(v.z for v in base_bbox)))
+    base_armature.scale = (ai_dim.x / base_dim.x if base_dim.x > 0 else 1.0,
+                            ai_dim.y / base_dim.y if base_dim.y > 0 else 1.0,
+                            ai_dim.z / base_dim.z if base_dim.z > 0 else 1.0)
+    bpy.context.view_layer.objects.active = base_armature
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+
+    pattern = os.path.join(masks_dir, f"{base_prefix}_mask_*.png")
+    sorted_masks = []
+    for path in glob.glob(pattern):
+        try:
+            img = bpy.data.images.load(path, check_existing=False)
+            pixels = list(img.pixels)
+            wc = sum(1 for i in range(0, len(pixels), 4) if pixels[i] > 0.5)
+            bpy.data.images.remove(img)
+            if wc > 500:
+                sorted_masks.append((path, wc))
+        except Exception:
+            continue
+    sorted_masks.sort(key=lambda x: x[1], reverse=True)
+
+    def _nearest_bone(obj, armature):
+        bbox = [obj.matrix_world @ Vector(c) for c in obj.bound_box]
+        center = sum(bbox, Vector()) / 8.0
+        nearest = None; min_d = float('inf')
+        for bone in armature.pose.bones:
+            d = (center - (armature.matrix_world @ bone.head)).length
+            if d < min_d:
+                min_d = d; nearest = bone.name
+        return nearest
+
+    compiled = []
+    previous = base_body
+
+    for idx, (mask_path, size) in enumerate(sorted_masks):
+        mask_img = bpy.data.images.load(mask_path)
+        w, h = mask_img.size
+        pixels = list(mask_img.pixels)
+        bpy.context.view_layer.objects.active = ai_mesh
+        if bpy.context.object.mode != 'EDIT':
+            bpy.ops.object.mode_set(mode='EDIT')
+        bm = bmesh.from_edit_mesh(ai_mesh.data)
+        uv_layer = bm.loops.layers.uv.active
+        if uv_layer is None:
+            bpy.ops.object.mode_set(mode='OBJECT')
+            bpy.data.images.remove(mask_img)
+            continue
+        bpy.ops.mesh.select_all(action='DESELECT')
+        for face in bm.faces:
+            for loop in face.loops:
+                uv = loop[uv_layer].uv
+                px = min(int(uv.x * w), w - 1)
+                py = min(int(uv.y * h), h - 1)
+                pix_idx = (py * w + px) * 4
+                if pixels[pix_idx] > 0.5:
+                    face.select_set(True); break
+        bmesh.update_edit_mesh(ai_mesh.data)
+        if not any(f.select for f in bm.faces):
+            bpy.ops.object.mode_set(mode='OBJECT')
+            bpy.data.images.remove(mask_img)
+            continue
+        bpy.ops.mesh.separate(type='SELECTED')
+        bpy.ops.object.mode_set(mode='OBJECT')
+        layer_obj = [o for o in bpy.context.selected_objects if o != ai_mesh][-1]
+
+        if idx == 0:
+            layer_obj.name = f"{base_prefix}_Camada1_VestidoBranco"
+            sol = layer_obj.modifiers.new("Espessura_Tecido", 'SOLIDIFY')
+            sol.thickness = 0.0015
+            am = layer_obj.modifiers.new("Armature_Binding", 'ARMATURE')
+            am.object = base_armature
+            dt = layer_obj.modifiers.new("Weight_Transfer", 'DATA_TRANSFER')
+            dt.object = base_body
+            dt.use_vert_data = True
+            dt.data_types_verts = {'VGROUP_WEIGHTS'}
+            dt.vert_mapping = 'NEAREST'
+            bpy.context.view_layer.objects.active = layer_obj
+            try:
+                bpy.ops.object.datalayout_transfer(modifier="Weight_Transfer")
+            except Exception:
+                pass
+            bpy.ops.object.modifier_apply(modifier="Weight_Transfer")
+            previous = layer_obj
+        elif idx == 1:
+            layer_obj.name = f"{base_prefix}_Camada2_HarnessPreto"
+            sw = layer_obj.modifiers.new("Abracar_Vestido", 'SHRINKWRAP')
+            sw.target = previous
+            sw.wrap_method = 'NEAREST_SURFACEPOINT'
+            sw.offset = 0.0025
+            am = layer_obj.modifiers.new("Armature_Binding", 'ARMATURE')
+            am.object = base_armature
+            dt = layer_obj.modifiers.new("Weight_Transfer", 'DATA_TRANSFER')
+            dt.object = base_body
+            dt.use_vert_data = True
+            dt.data_types_verts = {'VGROUP_WEIGHTS'}
+            dt.vert_mapping = 'NEAREST'
+            bpy.context.view_layer.objects.active = layer_obj
+            try:
+                bpy.ops.object.datalayout_transfer(modifier="Weight_Transfer")
+            except Exception:
+                pass
+            bpy.ops.object.modifier_apply(modifier="Weight_Transfer")
+        else:
+            layer_obj.name = f"{base_prefix}_Camada3_PropRigido_{idx}"
+            target_bone = _nearest_bone(layer_obj, base_armature)
+            layer_obj.vertex_groups.clear()
+            vg = layer_obj.vertex_groups.new(name=target_bone)
+            vg.add([v.index for v in layer_obj.data.vertices], 1.0, 'REPLACE')
+            am = layer_obj.modifiers.new("Armature_Binding", 'ARMATURE')
+            am.object = base_armature
+
+        compiled.append(layer_obj.name)
+        bpy.context.view_layer.objects.active = ai_mesh
+        bpy.data.images.remove(mask_img)
+
+    if ai_mesh:
+        bpy.data.objects.remove(ai_mesh, do_unlink=True)
+    if not any(m.type == 'COLLISION' for m in base_body.modifiers):
+        base_body.modifiers.new("Body_Collision_Physics", 'COLLISION')
+
+    return json.dumps({"status": "success",
+                       "prefix": base_prefix,
+                       "armature": base_armature.name,
+                       "body_base": base_body.name,
+                       "extracted_layers": compiled})
