@@ -1,0 +1,96 @@
+{
+  "1": {
+    "inputs": { "image": "REPLACE_AT_RUNTIME.png", "upload": "image" },
+    "class_type": "LoadImage",
+    "_meta": { "title": "Load Image" }
+  },
+  "2": {
+    "inputs": {
+      "model": "microsoft/Florence-2-base-ft",
+      "precision": "fp16"
+    },
+    "class_type": "DownloadAndLoadFlorence2Model",
+    "_meta": { "title": "Florence-2 model" }
+  },
+  "10": {
+    "inputs": {
+      "image": ["1", 0],
+      "florence2_model": ["2", 0],
+      "text_input": "knife",
+      "task": "referring_expression_segmentation",
+      "fill_mask": true,
+      "output_mask_select": "",
+      "keep_model_loaded": true,
+      "max_new_tokens": 1024,
+      "num_beams": 3,
+      "do_sample": false,
+      "seed": 1
+    },
+    "class_type": "Florence2Run",
+    "_meta": { "title": "Florence2 segment knife" }
+  },
+  "11": {
+    "inputs": {
+      "image": ["1", 0],
+      "florence2_model": ["2", 0],
+      "text_input": "belt and straps",
+      "task": "referring_expression_segmentation",
+      "fill_mask": true,
+      "output_mask_select": "",
+      "keep_model_loaded": true,
+      "max_new_tokens": 1024,
+      "num_beams": 3,
+      "do_sample": false,
+      "seed": 1
+    },
+    "class_type": "Florence2Run",
+    "_meta": { "title": "Florence2 segment belts" }
+  },
+  "12": {
+    "inputs": {
+      "image": ["1", 0],
+      "florence2_model": ["2", 0],
+      "text_input": "gloves",
+      "task": "referring_expression_segmentation",
+      "fill_mask": true,
+      "output_mask_select": "",
+      "keep_model_loaded": true,
+      "max_new_tokens": 1024,
+      "num_beams": 3,
+      "do_sample": false,
+      "seed": 1
+    },
+    "class_type": "Florence2Run",
+    "_meta": { "title": "Florence2 segment gloves" }
+  },
+  "30": {
+    "inputs": { "mask": ["10", 1] },
+    "class_type": "MaskToImage",
+    "_meta": { "title": "Knife mask->image" }
+  },
+  "31": {
+    "inputs": { "mask": ["11", 1] },
+    "class_type": "MaskToImage",
+    "_meta": { "title": "Belts mask->image" }
+  },
+  "32": {
+    "inputs": { "mask": ["12", 1] },
+    "class_type": "MaskToImage",
+    "_meta": { "title": "Gloves mask->image" }
+  },
+  "40": {
+    "inputs": { "images": ["30", 0], "filename_prefix": "alice_mask_knife" },
+    "class_type": "SaveImage",
+    "_meta": { "title": "Save knife mask" }
+  },
+  "41": {
+    "inputs": { "images": ["31", 0], "filename_prefix": "alice_mask_belts" },
+    "class_type": "SaveImage",
+    "_meta": { "title": "Save belts mask" }
+  },
+  "42": {
+    "inputs": { "images": ["32", 0], "filename_prefix": "alice_mask_gloves" },
+    "class_type": "SaveImage",
+    "_meta": { "title": "Save gloves mask" }
+  }
+}
