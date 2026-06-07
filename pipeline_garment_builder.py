@@ -36,31 +36,39 @@ def run_bridge(script):
 
 def main():
     ap=argparse.ArgumentParser()
-    ap.add_argument('--blueprint', default=None, help='caminho JSON blueprint (alt: --chapeleiro)')
-    ap.add_argument('--chapeleiro', action='store_true', help='usa preset Alice Chapeleiro 22 pecas')
+    ap.add_argument('--blueprint', default=None, help='caminho JSON blueprint (alt: --outfit / --chapeleiro)')
+    ap.add_argument('--outfit-name', default=None,
+                    choices=['chapeleiro','base','cheshire','coelho','lagarta','rainha'],
+                    help='outfit name from registry (carrega via garment_outfit_loader)')
+    ap.add_argument('--chapeleiro', action='store_true', help='alias: --outfit-name chapeleiro (legacy)')
     ap.add_argument('--character', default='Alice_Base_Body')
-    ap.add_argument('--outfit', default='Alice_Chapeleiro')
+    ap.add_argument('--outfit', default=None, help='nome da collection no Blender (default: PA_<outfit_name>)')
     ap.add_argument('--piece', default=None, help='build apenas esta peca (piece_id ou accessory_id)')
     ap.add_argument('--remove-piece', default=None, help='remove objetos PA_<id>*')
     ap.add_argument('--list-pieces', action='store_true', help='lista build_order do blueprint')
     ap.add_argument('--validate-render', action='store_true')
     args=ap.parse_args()
 
-    # Carrega blueprint: prioridade --blueprint, depois --chapeleiro
-    if args.chapeleiro:
-        bp_load = "import garment_alice_chapeleiro\nbp = garment_alice_chapeleiro.build_blueprint()\n"
+    # Resolve outfit name
+    outfit_name = args.outfit_name or ('chapeleiro' if args.chapeleiro else None)
+    if not args.outfit:
+        args.outfit = f'PA_Alice_{(outfit_name or "Custom").capitalize()}'
+
+    # Carrega blueprint: prioridade --blueprint, depois --outfit-name/--chapeleiro
+    if outfit_name:
+        bp_load = f"import garment_outfit_loader\nbp = garment_outfit_loader.build_blueprint_for('{outfit_name}')\n"
     elif args.blueprint:
         bp_path=os.path.abspath(args.blueprint)
         bp_load = f"bp = garment_schema.load_blueprint(r'{bp_path}')\n"
     else:
-        ap.error('precisa de --blueprint <path> ou --chapeleiro')
+        ap.error('precisa de --blueprint <path> ou --outfit-name <name> ou --chapeleiro')
 
     header = f"""
 import sys, importlib
 sys.path.insert(0, r'{LIVE_DIR}')
-import garment_schema, garment_builder, garment_fit_to_body, garment_alice_chapeleiro
+import garment_schema, garment_builder, garment_fit_to_body, garment_outfit_loader
 importlib.reload(garment_schema); importlib.reload(garment_builder)
-importlib.reload(garment_fit_to_body); importlib.reload(garment_alice_chapeleiro)
+importlib.reload(garment_fit_to_body); importlib.reload(garment_outfit_loader)
 {bp_load}
 """
 

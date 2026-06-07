@@ -1,0 +1,67 @@
+{
+  "_doc": "Registry central de outfits Alice. Cada outfit aponta para pasta com 10 imagens passo-a-passo + turnaround + T-Pose FBX.",
+  "_base_dir": "D:/References/img/Model 3D/BASE",
+  "_step_images_per_outfit": 10,
+  "outfits": {
+    "chapeleiro": {
+      "display_name": "Alice Chapeleiro",
+      "refs_dir": "D:/References/img/Model 3D/BASE/Alice chapeleiro",
+      "turnaround": "alice-chapeleiro.png",
+      "alice_base_ref": "alice.jpg",
+      "tpose_fbx": "Alice-T-Pose.fbx",
+      "manifest": "chapeleiro.json",
+      "step_images_pattern": "ChatGPT Image 7 de jun. de 2026, 11_05_*.png",
+      "weapon": "knife"
+    },
+    "base": {
+      "display_name": "Alice Base (faca cozinha)",
+      "refs_dir": "D:/References/img/Model 3D/BASE/alice base",
+      "turnaround": "alice-faca-cozinha.png",
+      "alice_base_ref": "alice.jpg",
+      "tpose_fbx": "Alice-T-Pose.fbx",
+      "manifest": "base.json",
+      "step_images_pattern": "ChatGPT Image 7 de jun. de 2026, 11_25_*.png",
+      "weapon": "faca_cozinha"
+    },
+    "cheshire": {
+      "display_name": "Alice Cheshire (gato)",
+      "refs_dir": "D:/References/img/Model 3D/BASE/alice cheshire",
+      "turnaround": "alice-gato.png",
+      "alice_base_ref": "alice.jpg",
+      "tpose_fbx": "Alice-T-Pose.fbx",
+      "manifest": "cheshire.json",
+      "step_images_pattern": "ChatGPT Image 7 de jun. de 2026, 13_36_*.png",
+      "weapon": "gato_arma"
+    },
+    "coelho": {
+      "display_name": "Alice Coelho (rabbit)",
+      "refs_dir": "D:/References/img/Model 3D/BASE/alice coelho",
+      "turnaround": null,
+      "alice_base_ref": "alice.jpg",
+      "tpose_fbx": "Alice-T-Pose.fbx",
+      "manifest": "coelho.json",
+      "step_images_pattern": "ChatGPT Image 7 de jun. de 2026, 13_26_*.png",
+      "weapon": "relogio_arma"
+    },
+    "lagarta": {
+      "display_name": "Alice Lagarta (caterpillar)",
+      "refs_dir": "D:/References/img/Model 3D/BASE/alice lagarta",
+      "turnaround": "alice-lagarta.png",
+      "alice_base_ref": "alice.jpg",
+      "tpose_fbx": "Alice-T-Pose.fbx",
+      "manifest": "lagarta.json",
+      "step_images_pattern": "ChatGPT Image 7 de jun. de 2026, 13_44_*.png",
+      "weapon": "narguile_arma"
+    },
+    "rainha": {
+      "display_name": "Alice Rainha (queen of hearts)",
+      "refs_dir": "D:/References/img/Model 3D/BASE/alice rainha",
+      "turnaround": "alice-rainha.png",
+      "alice_base_ref": "alice.jpg",
+      "tpose_fbx": "Alice-T-Pose.fbx",
+      "manifest": "rainha.json",
+      "step_images_pattern": "ChatGPT Image 7 de jun. de 2026, 13_51_*.png",
+      "weapon": "cetro_coracao"
+    }
+  }
+}

@@ -1,5 +1,37 @@
 # Alice Chapeleiro — Build Piece-by-Piece + Hair
 
+## Multi-Outfit Registry (6 outfits)
+
+Refs em `D:/References/img/Model 3D/BASE/`:
+- `Alice chapeleiro/` (turnaround: alice-chapeleiro.png) — knife
+- `alice base/` (alice-faca-cozinha.png) — faca cozinha
+- `alice cheshire/` (alice-gato.png) — gato arma
+- `alice coelho/` — relogio arma
+- `alice lagarta/` (alice-lagarta.png) — narguile
+- `alice rainha/` (alice-rainha.png) — cetro coracao
+
+Registry: `work/manifests/outfits_registry.json`. Manifest por outfit: `work/manifests/<outfit>.json`.
+
+Fluxo multi-outfit (Qwen3-VL llama-server rodando porta 8080):
+
+```bash
+# 1) descobre pecas via Qwen analisando 10 step images
+python pipeline_outfit_discovery.py --outfit cheshire    # gera cheshire.json
+python pipeline_outfit_discovery.py --outfit coelho      # gera coelho.json
+python pipeline_outfit_discovery.py --outfit lagarta     # gera lagarta.json
+python pipeline_outfit_discovery.py --outfit rainha      # gera rainha.json
+python pipeline_outfit_discovery.py --outfit base        # gera base.json
+
+# 2) Qwen specs detalhados (cor RGB, bbox, florence2 prompts)
+python pipeline_qwen_piece_specs.py --outfit cheshire
+
+# 3) build no Blender (bridge_cmd rodando)
+python pipeline_garment_builder.py --outfit-name cheshire --list-pieces
+python pipeline_garment_builder.py --outfit-name cheshire --piece <piece_id> --validate-render
+```
+
+
+
 Pipeline procedural integrado a partir do pacote `claude-blender-designer-garment-update`,
 adaptado ao manifest existente `work/alice_chapeleiro_manifest.json` (22 pecas canonicas).
 
