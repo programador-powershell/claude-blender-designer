@@ -13,7 +13,7 @@
     "branco_chemise_interna": "#E5DCC5"
   },
   "pieces": [
-    {"order":  1, "name": "bloomer_interno",        "level": "TECIDO_BASE",      "bone_anchor": "mixamorig:Hips",          "z": [0.45, 0.78], "color_hex": "#E5DCC5", "ref_img": "img3", "shape": "shorts curto babado", "rigidity": "soft_cloth"},
+    {"order":  1, "name": "bloomer_interno",        "level": "TECIDO_BASE",      "bone_anchor": "mixamorig:Hips",          "z": [0.55, 1.00], "color_hex": "#E5DCC5", "ref_img": "img1", "shape": "shorts curto babado", "rigidity": "soft_cloth"},
     {"order":  2, "name": "chemise_branca",         "level": "TECIDO_BASE",      "bone_anchor": "mixamorig:Spine1",        "z": [0.55, 1.42], "color_hex": "#E5DCC5", "ref_img": "img1", "shape": "vestido base interno longo+manga curta", "rigidity": "soft_cloth"},
     {"order":  3, "name": "meia_listrada_esq",      "level": "SOBREPOSICAO",     "bone_anchor": "mixamorig:LeftLeg",       "z": [0.05, 0.55], "color_hex": "#1A1612", "ref_img": "img8", "shape": "meia listrada preto/branco", "rigidity": "tight_cling"},
     {"order":  4, "name": "meia_listrada_dir",      "level": "SOBREPOSICAO",     "bone_anchor": "mixamorig:RightLeg",      "z": [0.05, 0.55], "color_hex": "#1A1612", "ref_img": "img8", "shape": "meia listrada preto/branco", "rigidity": "tight_cling"},
