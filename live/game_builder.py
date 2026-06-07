@@ -2339,3 +2339,145 @@ def build_aaa_layered_character(glb_path, body_fbx_path, masks_dir,
                        "armature": base_armature.name,
                        "body_base": base_body.name,
                        "extracted_layers": compiled})
+
+
+# ===========================================================================
+# Universal UV pipeline: classifica masks por densidade pixel (agnostico estilo)
+# 5 niveis: pele / tecido_base(>40%) / sobreposicao(15-40%) / compressao(5-15%) / hardware(<5%)
+# ===========================================================================
+
+def _isolate_mesh_by_uv_mask(main_obj, mask_path):
+    """Seleciona faces do main_obj cuja UV cai em pixel branco da mask + separa.
+    Retorna o novo Object resultante (ou None se nada selecionado)."""
+    import bmesh
+    mask_img = bpy.data.images.load(mask_path, check_existing=False)
+    W, H = mask_img.size
+    pixels = list(mask_img.pixels)
+    bpy.context.view_layer.objects.active = main_obj
+    bpy.ops.object.mode_set(mode='EDIT')
+    bm = bmesh.from_edit_mesh(main_obj.data)
+    uv_layer = bm.loops.layers.uv.active
+    if uv_layer is None:
+        bpy.ops.object.mode_set(mode='OBJECT')
+        bpy.data.images.remove(mask_img)
+        return None
+    bpy.ops.mesh.select_all(action='DESELECT')
+    for face in bm.faces:
+        for loop in face.loops:
+            uv = loop[uv_layer].uv
+            px = min(int(uv.x * W), W - 1)
+            py = min(int(uv.y * H), H - 1)
+            idx = (py * W + px) * 4
+            if pixels[idx] > 0.5:
+                face.select_set(True); break
+    bmesh.update_edit_mesh(main_obj.data)
+    if not any(f.select for f in bm.faces):
+        bpy.ops.object.mode_set(mode='OBJECT')
+        bpy.data.images.remove(mask_img)
+        return None
+    bpy.ops.mesh.separate(type='SELECTED')
+    bpy.ops.object.mode_set(mode='OBJECT')
+    layer_obj = [o for o in bpy.context.selected_objects if o != main_obj][-1]
+    bpy.data.images.remove(mask_img)
+    return layer_obj
+
+def _apply_weight_transfer(layer_obj, base_body):
+    """Armature mod + DataTransfer pesos do base_body. Aplica DT permanente."""
+    arm_mod = next((m for m in base_body.modifiers if m.type == 'ARMATURE'), None)
+    if arm_mod and arm_mod.object:
+        am = layer_obj.modifiers.new("Armature_Binding", 'ARMATURE')
+        am.object = arm_mod.object
+    dt = layer_obj.modifiers.new("Weight_Transfer", 'DATA_TRANSFER')
+    dt.object = base_body
+    dt.use_vert_data = True
+    dt.data_types_verts = {'VGROUP_WEIGHTS'}
+    dt.vert_mapping = 'NEAREST'
+    bpy.context.view_layer.objects.active = layer_obj
+    try:
+        bpy.ops.object.datalayout_transfer(modifier="Weight_Transfer")
+    except Exception:
+        pass
+    bpy.ops.object.modifier_apply(modifier="Weight_Transfer")
+
+def _bind_to_nearest_bone_rigidly(layer_obj, base_body=None):
+    """Encontra osso mais proximo do bbox centroid + bind weight 1.0 + Armature mod."""
+    if base_body is None:
+        base_body = next((o for o in bpy.data.objects if o.type == 'MESH' and 'body' in o.name.lower()), None)
+    arm_mod = next((m for m in base_body.modifiers if m.type == 'ARMATURE'), None) if base_body else None
+    arm = arm_mod.object if arm_mod else next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
+    if not arm:
+        return None
+    target_bone = find_nearest_bone(layer_obj, arm)
+    layer_obj.vertex_groups.clear()
+    vg = layer_obj.vertex_groups.new(name=target_bone)
+    vg.add([v.index for v in layer_obj.data.vertices], 1.0, 'REPLACE')
+    am = layer_obj.modifiers.new("Armature_Binding", 'ARMATURE')
+    am.object = arm
+    return target_bone
+
+def process_universal_uv_pipeline(mesh_name, masks_directory, base_body_name,
+                                    thr_base=50000, thr_overlay=15000, thr_compress=5000):
+    """Classifica masks por densidade pixel + monta Inside-Out dinamico.
+    Niveis: TECIDO_BASE > thr_base / SOBREPOSICAO thr_overlay-thr_base /
+    COMPRESSAO thr_compress-thr_overlay / METALS_PROPS < thr_compress."""
+    import glob
+    main_obj = bpy.data.objects.get(mesh_name)
+    base_body = bpy.data.objects.get(base_body_name)
+    if not main_obj or not base_body:
+        return json.dumps({"err": f"mesh '{mesh_name}' ou body '{base_body_name}' ausente"})
+
+    all_masks = glob.glob(os.path.join(masks_directory, "*.png"))
+    uv_manifest = []
+    for mask_path in all_masks:
+        wp = _mask_white_pixel_count(mask_path)
+        if wp < 100:
+            continue
+        if wp > thr_base:
+            behavior = "TECIDO_BASE"
+        elif wp > thr_overlay:
+            behavior = "SOBREPOSICAO"
+        elif wp > thr_compress:
+            behavior = "COMPRESSAO"
+        else:
+            behavior = "METALS_PROPS"
+        uv_manifest.append({"path": mask_path, "density": wp, "behavior": behavior})
+    uv_manifest.sort(key=lambda x: x["density"], reverse=True)
+
+    previous_layer = base_body
+    compiled = []
+    for idx, layer in enumerate(uv_manifest):
+        layer_obj = _isolate_mesh_by_uv_mask(main_obj, layer["path"])
+        if not layer_obj:
+            continue
+        beh = layer["behavior"]
+        if beh == "TECIDO_BASE":
+            layer_obj.name = f"Camada_{idx:02d}_VestidoBase"
+            sol = layer_obj.modifiers.new("Solidify_Base", 'SOLIDIFY')
+            sol.thickness = 0.0015
+            _apply_weight_transfer(layer_obj, base_body)
+            previous_layer = layer_obj
+        elif beh == "SOBREPOSICAO":
+            layer_obj.name = f"Camada_{idx:02d}_Sobreposicao"
+            sw = layer_obj.modifiers.new("Shrinkwrap_Binding", 'SHRINKWRAP')
+            sw.target = previous_layer
+            sw.offset = 0.0030
+            sw.wrap_method = 'NEAREST_SURFACEPOINT'
+            sw.wrap_mode = 'OUTSIDE_SURFACE'
+            _apply_weight_transfer(layer_obj, base_body)
+            previous_layer = layer_obj
+        elif beh == "COMPRESSAO":
+            layer_obj.name = f"Camada_{idx:02d}_Cinto_Tira"
+            sw = layer_obj.modifiers.new("Shrinkwrap_Tight", 'SHRINKWRAP')
+            sw.target = previous_layer
+            sw.offset = 0.0015
+            sw.wrap_method = 'NEAREST_SURFACEPOINT'
+            sw.wrap_mode = 'OUTSIDE_SURFACE'
+            _apply_weight_transfer(layer_obj, base_body)
+        else:  # METALS_PROPS
+            layer_obj.name = f"Camada_{idx:02d}_Hardware_Rigido"
+            _bind_to_nearest_bone_rigidly(layer_obj, base_body)
+        compiled.append({"obj": layer_obj.name, "behavior": beh, "density_px": layer["density"]})
+
+    return json.dumps({"status": "OK",
+                       "layers_assembled": len(compiled),
+                       "manifest": compiled})
