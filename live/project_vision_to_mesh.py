@@ -22,8 +22,14 @@ def project_vision_coordinates_to_mesh(base_body_name, vision_json_path, camera_
     if not curves:
         print("[AVISO] Nenhuma curva no JSON."); return
 
-    mesh_data = base_body.to_mesh()
-    bvh = BVHTree.FromMesh(mesh_data)
+    # Blender 5.x: BVHTree.FromMesh removed -> use FromObject (fallback FromBMesh)
+    try:
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+        bvh = BVHTree.FromObject(base_body, depsgraph)
+    except Exception:
+        mesh_data_tmp = base_body.to_mesh()
+        bm_tmp = bmesh.new(); bm_tmp.from_mesh(mesh_data_tmp)
+        bvh = BVHTree.FromBMesh(bm_tmp); bm_tmp.free()
 
     bbox = [base_body.matrix_world @ mathutils.Vector(c) for c in base_body.bound_box]
     min_x = min(v.x for v in bbox); max_x = max(v.x for v in bbox)
@@ -66,7 +72,8 @@ def project_vision_coordinates_to_mesh(base_body_name, vision_json_path, camera_
         _apply_shaping_modifiers(comp_obj, base_body)
         created.append(comp_obj.name)
 
-    base_body.to_mesh_clear()
+    try: base_body.to_mesh_clear()
+    except Exception: pass
     print(f"[PROJECT ALICE] {len(created)} componentes moldados: {created}")
     return created
 
