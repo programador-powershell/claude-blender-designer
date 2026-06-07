@@ -197,20 +197,21 @@ def cv2_inspect(render_path, ref_crop_path, out_prefix):
 
 # ============ QWEN ============
 def qwen_validate(render_path, ref_path, piece):
-    from vision_prompt_lib import render_vs_ref_prompt, soulslike_system_prompt
+    from vision_prompt_lib import render_vs_ref_prompt
+    from project_alice_directive import get_system_prompt
     rb = b64(render_path); fb = b64(ref_path)
     prompt = render_vs_ref_prompt(piece)
     payload = {
         "model": "qwen3-vl",
         "messages": [
-            {"role":"system","content": soulslike_system_prompt()},
+            {"role":"system","content": get_system_prompt()},
             {"role":"user","content":[
                 {"type":"image_url","image_url":{"url":f"data:image/png;base64,{rb}"}},
                 {"type":"image_url","image_url":{"url":f"data:image/png;base64,{fb}"}},
                 {"type":"text","text":prompt}
             ]}
         ],
-        "max_tokens": 300, "temperature": 0.0
+        "max_tokens": 350, "temperature": 0.0
     }
     req = urllib.request.Request(QWEN, data=json.dumps(payload).encode(),
                                   headers={"Content-Type":"application/json"})
