@@ -1385,11 +1385,22 @@ def inject_secondary_physics_bones(mesh_name, arm_name, parent_spine="mixamorig:
             c.min_x, c.max_x, c.min_y, c.max_y, c.min_z, c.max_z = -0.10, 0.10, -0.02, 0.02, -0.08, 0.08
     bpy.ops.object.mode_set(mode='OBJECT')
 
-def apply_vision_details_to_mesh(mesh_name, json_trace_path):
+def apply_vision_details_to_mesh(mesh_name, json_trace_path,
+                                  res=2048, line_width=3, line_intensity=0.92,
+                                  bump_strength=0.6, add_displacement=False,
+                                  disp_strength=0.008, project_axis='Y'):
     """
-    Aplica relevo (bump/normal) onde a IA (Hunyuan/Unique3D) falhou em criar geometria.
-    Le curvas/contornos do vision_trace.py (front/side/back) e gera textura procedural
-    de detalhe (relogios/cartas/recortes finos) sem alterar a malha base.
+    Injeta JSON de 'linhas de forca' do vision_trace.py como Displacement+Normal Map.
+    Reconstrui relevo visual (motifs/babados/dobras finas) que a IA (Hunyuan/Unique3D)
+    perdeu, sem precisar gerar geometria nova.
+
+    res: textura quadrada lado (2048 default).
+    line_width: stroke px (anti-aliased).
+    line_intensity: 0..1 (escuro=fundo, claro=relevo).
+    bump_strength: forca do bump no shader (0..2).
+    add_displacement: True = adiciona Displace modifier (deforma malha de verdade).
+    disp_strength: amplitude do Displace (metros).
+    project_axis: eixo de proj UV ('Y'=frontal, 'X'=lateral, 'Z'=topo).
     """
     if not os.path.exists(json_trace_path):
         return json.dumps({"err": f"trace nao encontrado: {json_trace_path}"})
@@ -1398,40 +1409,159 @@ def apply_vision_details_to_mesh(mesh_name, json_trace_path):
     mesh = bpy.data.objects.get(mesh_name)
     if not mesh:
         return json.dumps({"err": f"mesh {mesh_name} nao encontrada"})
-    # 1) ensure material with Principled BSDF
+
+    import numpy as _np
+
+    # 1) raster curves -> heightmap (numpy)
+    W = H = int(res)
+    height = _np.zeros((H, W), dtype=_np.float32)
+    curves = data.get("curves", data.get("contours", []))
+    n_pts = 0
+
+    def _stamp(ix, iy, val, w):
+        # anti-aliased filled circle stroke
+        r = max(1, int(w))
+        for dy in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                d = (dx*dx + dy*dy) ** 0.5
+                if d > r: continue
+                xx, yy = ix + dx, iy + dy
+                if 0 <= xx < W and 0 <= yy < H:
+                    falloff = max(0.0, 1.0 - d / r)
+                    v = val * falloff
+                    if v > height[yy, xx]:
+                        height[yy, xx] = v
+
+    def _line(p0, p1, val, w):
+        x0, y0 = p0; x1, y1 = p1
+        # normalize 0..1 if needed
+        if x0 <= 1: x0 *= W
+        if y0 <= 1: y0 *= H
+        if x1 <= 1: x1 *= W
+        if y1 <= 1: y1 *= H
+        steps = int(max(abs(x1 - x0), abs(y1 - y0))) + 1
+        for i in range(steps + 1):
+            t = i / max(steps, 1)
+            ix = int(x0 + (x1 - x0) * t)
+            iy = int(y0 + (y1 - y0) * t)
+            _stamp(ix, iy, val, w)
+
+    for cv in curves:
+        pts = cv.get("points", cv) if isinstance(cv, dict) else cv
+        if len(pts) < 2: continue
+        for k in range(len(pts) - 1):
+            _line(pts[k], pts[k+1], line_intensity, line_width)
+            n_pts += 1
+
+    # 2) smooth height pra suavizar antes de gerar normal
+    # box blur 3x3 manual
+    def _blur(a, passes=2):
+        out = a.copy()
+        for _ in range(passes):
+            tmp = _np.zeros_like(out)
+            tmp[1:-1,1:-1] = (out[:-2,:-2]+out[:-2,1:-1]+out[:-2,2:]+
+                              out[1:-1,:-2]+out[1:-1,1:-1]+out[1:-1,2:]+
+                              out[2:,:-2]+out[2:,1:-1]+out[2:,2:]) / 9.0
+            out = tmp
+        return out
+    height_s = _blur(height, passes=1)
+
+    # 3) gerar tres imagens Blender: height, color (deriva), normal RGB
+    def _ensure_img(name, w, h, float_buf=False):
+        img = bpy.data.images.get(name)
+        if img is None:
+            img = bpy.data.images.new(name, w, h, alpha=False, float_buffer=float_buf)
+        return img
+
+    # heightmap (gray)
+    img_h = _ensure_img(f"{mesh_name}_VisionHeight", W, H, float_buf=True)
+    pix_h = _np.stack([height_s, height_s, height_s, _np.ones_like(height_s)], axis=-1)
+    img_h.pixels = pix_h.ravel().tolist()
+
+    # normal map: derivative
+    gx = _np.zeros_like(height_s); gy = _np.zeros_like(height_s)
+    gx[:,1:-1] = (height_s[:,2:] - height_s[:,:-2]) * 0.5
+    gy[1:-1,:] = (height_s[2:,:] - height_s[:-2,:]) * 0.5
+    # encode RGB normal (tangent space): R=gx*0.5+0.5, G=gy*0.5+0.5, B=1.0
+    nz = _np.ones_like(height_s)
+    norm = _np.sqrt(gx*gx + gy*gy + nz*nz)
+    nx = gx / norm; ny = gy / norm; nzn = nz / norm
+    img_n = _ensure_img(f"{mesh_name}_VisionNormal", W, H, float_buf=True)
+    pix_n = _np.stack([nx*0.5+0.5, ny*0.5+0.5, nzn*0.5+0.5, _np.ones_like(nzn)], axis=-1)
+    img_n.pixels = pix_n.ravel().tolist()
+
+    # 4) UV: project from view (front/side/top) se ainda nao tem
+    if not mesh.data.uv_layers:
+        bpy.context.view_layer.objects.active = mesh
+        for o in bpy.context.selected_objects: o.select_set(False)
+        mesh.select_set(True)
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+        if project_axis == 'Y':
+            bpy.ops.uv.project_from_view(orthographic=False)
+        else:
+            bpy.ops.uv.smart_project(angle_limit=1.15, island_margin=0.02)
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+    # 5) material + Principled BSDF + normal map + bump
     if not mesh.data.materials or not mesh.data.materials[0]:
         m = bpy.data.materials.new(f"{mesh_name}_VisionMat"); m.use_nodes = True
         mesh.data.materials.clear(); mesh.data.materials.append(m)
-    mat = mesh.data.materials[0]; nt = mat.node_tree
+    mat = mesh.data.materials[0]
+    if not mat.use_nodes: mat.use_nodes = True
+    nt = mat.node_tree
     bsdf = nt.nodes.get('Principled BSDF') or nt.nodes.new('ShaderNodeBsdfPrincipled')
-    # 2) procedural detail tex from trace
-    # tex BLEND is too primitive; use Image generated from trace curves (front view UV proj)
-    W, H = 1024, 1024
-    img = bpy.data.images.get(f"{mesh_name}_VisionDetail")
-    if img is None:
-        img = bpy.data.images.new(f"{mesh_name}_VisionDetail", W, H, alpha=False, float_buffer=False)
-    # paint curves into image alpha as grayscale relief
-    import struct
-    px = [0.5] * (W * H * 4)
-    curves = data.get("curves", data.get("contours", []))
-    for cv in curves:
-        pts = cv.get("points", cv) if isinstance(cv, dict) else cv
-        for x, y in pts:
-            ix = int(max(0, min(W - 1, x * W if x <= 1 else x)))
-            iy = int(max(0, min(H - 1, y * H if y <= 1 else y)))
-            for dy in range(-1, 2):
-                for dx in range(-1, 2):
-                    xx = max(0, min(W - 1, ix + dx)); yy = max(0, min(H - 1, iy + dy))
-                    i = (yy * W + xx) * 4
-                    px[i] = px[i+1] = px[i+2] = 0.95; px[i+3] = 1.0
-    img.pixels = px
-    # 3) wire as bump
-    tex_node = nt.nodes.new('ShaderNodeTexImage'); tex_node.image = img
-    tex_node.image.colorspace_settings.name = 'Non-Color'
-    bump = nt.nodes.new('ShaderNodeBump'); bump.inputs['Strength'].default_value = 0.35
-    nt.links.new(tex_node.outputs['Color'], bump.inputs['Height'])
-    nt.links.new(bump.outputs['Normal'], bsdf.inputs['Normal'])
-    return json.dumps({"status":"OK","curves_applied":len(curves),"image":img.name})
+
+    # remove old vision nodes
+    for nd in list(nt.nodes):
+        if nd.name.startswith('VisionDetail_'):
+            nt.nodes.remove(nd)
+
+    tex_n = nt.nodes.new('ShaderNodeTexImage'); tex_n.name = 'VisionDetail_NrmTex'
+    tex_n.image = img_n; tex_n.image.colorspace_settings.name = 'Non-Color'
+    nmap = nt.nodes.new('ShaderNodeNormalMap'); nmap.name = 'VisionDetail_NormalMap'
+    nmap.inputs['Strength'].default_value = bump_strength
+    nt.links.new(tex_n.outputs['Color'], nmap.inputs['Color'])
+
+    tex_h = nt.nodes.new('ShaderNodeTexImage'); tex_h.name = 'VisionDetail_HeightTex'
+    tex_h.image = img_h; tex_h.image.colorspace_settings.name = 'Non-Color'
+    bump = nt.nodes.new('ShaderNodeBump'); bump.name = 'VisionDetail_Bump'
+    bump.inputs['Strength'].default_value = bump_strength * 0.5
+    nt.links.new(tex_h.outputs['Color'], bump.inputs['Height'])
+    # chain: bump feeds normal map, normal map feeds BSDF
+    nt.links.new(bump.outputs['Normal'], nmap.inputs['Normal'])
+    nt.links.new(nmap.outputs['Normal'], bsdf.inputs['Normal'])
+
+    # 6) optional real Displacement modifier
+    disp_info = None
+    if add_displacement:
+        # remove old vision displace
+        for m in list(mesh.modifiers):
+            if m.name == 'VisionDisplace': mesh.modifiers.remove(m)
+        # ensure subsurf for detail
+        if not any(m.type == 'SUBSURF' for m in mesh.modifiers):
+            sub = mesh.modifiers.new('VisionSubsurf', 'SUBSURF')
+            sub.levels = 1; sub.render_levels = 2
+        dt = bpy.data.textures.get(f"{mesh_name}_VisionDispTex")
+        if dt is None:
+            dt = bpy.data.textures.new(f"{mesh_name}_VisionDispTex", type='IMAGE')
+        dt.image = img_h
+        mod = mesh.modifiers.new('VisionDisplace', 'DISPLACE')
+        mod.texture = dt
+        mod.strength = disp_strength
+        mod.mid_level = 0.0
+        mod.texture_coords = 'UV'
+        disp_info = {"strength": disp_strength, "modifier": "VisionDisplace"}
+
+    return json.dumps({
+        "status": "OK",
+        "curves": len(curves),
+        "segments": n_pts,
+        "height_img": img_h.name,
+        "normal_img": img_n.name,
+        "bump_strength": bump_strength,
+        "displacement": disp_info,
+    })
 
 def execute_ultimate_pipeline(generated_file_path, character_name="Alice_Perfeita", use_shd=True):
     """Merged pipeline: ingest GLB -> skeleton -> physics bones -> skirt layers ->
