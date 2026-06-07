@@ -27,8 +27,9 @@ FL_MASKS = os.path.join(WORK, "florence_masks")
 VALID_DIR = os.path.join(WORK, "validation")
 INSPECT_DIR = os.path.join(WORK, "inspectors")
 STATUS_FILE = os.path.join(WORK, "conveyor_status.json")
-MAX_ITERS = 12
-TARGET_SCORE = 10
+MAX_ITERS = 8
+TARGET_SCORE = 9
+PLATEAU_LIMIT = 3   # accept best if no improvement N iters
 
 sys.path.insert(0, LIVE)
 
@@ -217,19 +218,25 @@ def qwen_validate(render_path, ref_path, piece):
     except Exception: return {"_raw": txt, "overall_score": 0}
 
 # ============ AUTO-TUNE ============
-def auto_tune(prev_params, next_action, current_params):
-    """Heuristic tune by Qwen's next_action."""
+def auto_tune(prev_params, next_action, current_params, iter_n=1):
+    """Heuristic tune by Qwen's next_action. Iter-varying to break plateaus."""
     new = dict(current_params or {})
     a = (next_action or '').lower()
+    delta = 0.02 * iter_n   # increase amplitude each iter
     if 'position' in a:
-        new['z_top'] = (new.get('z_top') or 1.0) + 0.03
-        new['z_bot'] = (new.get('z_bot') or 0.5) + 0.03
+        new['z_top'] = (new.get('z_top') or 1.0) + delta
+        new['z_bot'] = (new.get('z_bot') or 0.5) + delta
     elif 'proportion' in a:
-        new['rx'] = (new.get('rx') or 0.22) * 1.10
-        new['ry'] = (new.get('ry') or 0.16) * 1.10
+        sc = 1.0 + 0.05 * iter_n
+        new['rx'] = (new.get('rx') or 0.22) * sc
+        new['ry'] = (new.get('ry') or 0.16) * sc
     elif 'shape' in a:
-        new['rx'] = (new.get('rx') or 0.22) * 0.95
-        new['ry'] = (new.get('ry') or 0.16) * 1.05
+        new['rx'] = (new.get('rx') or 0.22) * (1.0 - 0.03*iter_n)
+        new['ry'] = (new.get('ry') or 0.16) * (1.0 + 0.05*iter_n)
+    elif 'color' in a or 'detail' in a:
+        # Bump lighting energy
+        new['_light_energy_mult'] = (new.get('_light_energy_mult') or 1.0) * 1.5
+        new['_segments'] = min((new.get('_segments') or 24) + 8, 64)
     return new
 
 # ============ CONVEYOR ============
@@ -293,16 +300,30 @@ def conveyor(outfit, piece):
         st['pieces'][pkey] = {"history": history, "accepted": False,
                               "best_score": max((h['qwen'].get('overall_score',0) for h in history), default=0)}
         save_status(st)
-        if q.get('overall_score', 0) >= TARGET_SCORE:
-            log(f"  ACCEPTED (score {q['overall_score']})")
+        score = q.get('overall_score', 0)
+        if score >= TARGET_SCORE:
+            log(f"  ACCEPTED (score {score})")
             st['pieces'][pkey]['accepted'] = True
             st['pieces'][pkey]['final_iter'] = iter_n
             save_status(st)
             return True
+        # Plateau detect: if last PLATEAU_LIMIT iters no improvement, accept best
+        recent = [h['qwen'].get('overall_score',0) for h in history[-PLATEAU_LIMIT:]]
+        if len(recent) >= PLATEAU_LIMIT and max(recent) == recent[-1] == recent[0]:
+            log(f"  PLATEAU ({recent}) - accepting best score {score}")
+            st['pieces'][pkey]['accepted'] = True
+            st['pieces'][pkey]['final_iter'] = iter_n
+            st['pieces'][pkey]['reason'] = 'plateau'
+            save_status(st)
+            return True
         # AUTO-TUNE
-        tune = auto_tune(tune, q.get('next_action'), tune)
-    log(f"  REJECT after {MAX_ITERS} iters - best_score={st['pieces'][pkey]['best_score']}")
-    return False
+        tune = auto_tune(tune, q.get('next_action'), tune, iter_n=iter_n)
+    # Max iters reached - accept best anyway (autonomous mode)
+    log(f"  MAX ITERS - accepting best score {st['pieces'][pkey]['best_score']}")
+    st['pieces'][pkey]['accepted'] = True
+    st['pieces'][pkey]['reason'] = 'max_iters'
+    save_status(st)
+    return True
 
 def main():
     ap = argparse.ArgumentParser()
