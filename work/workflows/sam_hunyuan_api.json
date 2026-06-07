@@ -1,0 +1,14 @@
+{
+  "_README": "PLACEHOLDER ComfyUI API workflow. Replace contents by exporting from ComfyUI UI: Workflow -> Save (API Format). Workflow should: 1) LoadImage 2) BRIA RMBG or rembg 3) GroundingDinoSAMSegment with prompts ('knife', 'belt', 'glove') 4) SaveImage per mask 5) Hy3DGenerateMeshMultiView 6) Hy3DPostprocessMesh 7) Hy3DExportMesh as glb.",
+  "1": {
+    "inputs": { "image": "REPLACE_AT_RUNTIME.png", "upload": "image" },
+    "class_type": "LoadImage",
+    "_meta": { "title": "Load Image" }
+  },
+  "2": {
+    "inputs": { "image": ["1", 0], "model": "u2net" },
+    "class_type": "Image Remove Background (rembg)",
+    "_meta": { "title": "Remove bg" }
+  },
+  "_TODO": "Add SAMModelLoader (sam_vit_b_01ec64.pth) + GroundingDinoModelLoader + GroundingDinoSAMSegment nodes here, one per accessory prompt. Each branch ends with a SaveImage that names the file alice_*_knife / belts / gloves. Add the Hunyuan3D branch separately (LoadHy3D + GenerateMeshMultiView + Export). Then re-save this file in API format."
+}
