@@ -1,0 +1,601 @@
+{
+  "outfit_id": "alice_chapeleiro_layered",
+  "display_name": "Alice Liddell - Chapeleiro 22 pecas",
+  "version": "1.0",
+  "scale": "1 BU = 1 meter",
+  "target_character": "Alice_Base_Body",
+  "materials": [
+    {
+      "id": "teal_principal",
+      "color": [
+        0.17647058823529413,
+        0.26666666666666666,
+        0.2196078431372549,
+        1.0
+      ],
+      "roughness": 0.78,
+      "metallic": 0.0,
+      "alpha": 1.0
+    },
+    {
+      "id": "creme_underdress",
+      "color": [
+        0.788235294117647,
+        0.7137254901960784,
+        0.5607843137254902,
+        1.0
+      ],
+      "roughness": 0.82,
+      "metallic": 0.0,
+      "alpha": 1.0
+    },
+    {
+      "id": "preto_lace",
+      "color": [
+        0.054901960784313725,
+        0.050980392156862744,
+        0.047058823529411764,
+        0.78
+      ],
+      "roughness": 0.85,
+      "metallic": 0.0,
+      "alpha": 1.0
+    },
+    {
+      "id": "couro_bota",
+      "color": [
+        0.10196078431372549,
+        0.08627450980392157,
+        0.07058823529411765,
+        1.0
+      ],
+      "roughness": 0.5,
+      "metallic": 0.05,
+      "alpha": 1.0
+    },
+    {
+      "id": "ouro_metal",
+      "color": [
+        0.6039215686274509,
+        0.47843137254901963,
+        0.1803921568627451,
+        1.0
+      ],
+      "roughness": 0.38,
+      "metallic": 0.8,
+      "alpha": 1.0
+    },
+    {
+      "id": "branco_chemise",
+      "color": [
+        0.8980392156862745,
+        0.8627450980392157,
+        0.7725490196078432,
+        1.0
+      ],
+      "roughness": 0.78,
+      "metallic": 0.0,
+      "alpha": 1.0
+    },
+    {
+      "id": "paper_card",
+      "color": [
+        0.82,
+        0.78,
+        0.67,
+        1.0
+      ],
+      "roughness": 0.7,
+      "metallic": 0.0,
+      "alpha": 1.0
+    }
+  ],
+  "pieces": [
+    {
+      "id": "bloomer_interno",
+      "category": "cloth_layer",
+      "layer": 1,
+      "material": "branco_chemise",
+      "shape": "skirt_ring",
+      "anchors": [
+        "mixamorig:Hips"
+      ],
+      "physics": "cloth",
+      "thickness": 0.003,
+      "z_offset": 0.0,
+      "params": {
+        "waist_radius": 0.16,
+        "hem_radius": 0.18,
+        "length": 0.33,
+        "folds": 12,
+        "segments": 48
+      },
+      "details": []
+    },
+    {
+      "id": "chemise_branca_torso",
+      "category": "fitted_panel",
+      "layer": 2,
+      "material": "branco_chemise",
+      "shape": "corset",
+      "anchors": [
+        "mixamorig:Spine1"
+      ],
+      "physics": "fitted",
+      "thickness": 0.003,
+      "z_offset": 0.0,
+      "params": {
+        "waist_radius": 0.16,
+        "bust_radius": 0.2,
+        "height": 0.4
+      },
+      "details": []
+    },
+    {
+      "id": "chemise_branca_skirt",
+      "category": "cloth_layer",
+      "layer": 2,
+      "material": "branco_chemise",
+      "shape": "skirt_ring",
+      "anchors": [
+        "mixamorig:Spine1"
+      ],
+      "physics": "cloth",
+      "thickness": 0.003,
+      "z_offset": 0.0,
+      "params": {
+        "waist_radius": 0.17,
+        "hem_radius": 0.32,
+        "length": 0.55,
+        "folds": 24,
+        "segments": 72
+      },
+      "details": []
+    },
+    {
+      "id": "meia_listrada_esq",
+      "category": "fitted_panel",
+      "layer": 3,
+      "material": "couro_bota",
+      "shape": "stocking_leg",
+      "anchors": [
+        "mixamorig:LeftLeg"
+      ],
+      "physics": "fitted",
+      "thickness": 0.002,
+      "z_offset": 0.0,
+      "params": {
+        "side": "left",
+        "z_top": 0.55,
+        "z_bot": 0.05,
+        "radius": 0.072
+      },
+      "details": []
+    },
+    {
+      "id": "meia_listrada_dir",
+      "category": "fitted_panel",
+      "layer": 4,
+      "material": "couro_bota",
+      "shape": "stocking_leg",
+      "anchors": [
+        "mixamorig:RightLeg"
+      ],
+      "physics": "fitted",
+      "thickness": 0.002,
+      "z_offset": 0.0,
+      "params": {
+        "side": "right",
+        "z_top": 0.55,
+        "z_bot": 0.05,
+        "radius": 0.072
+      },
+      "details": []
+    },
+    {
+      "id": "bota_alta_esq",
+      "category": "fitted_panel",
+      "layer": 5,
+      "material": "couro_bota",
+      "shape": "high_boot",
+      "anchors": [
+        "mixamorig:LeftFoot"
+      ],
+      "physics": "fitted",
+      "thickness": 0.005,
+      "z_offset": 0.0,
+      "params": {
+        "side": "left",
+        "z_top": 0.35,
+        "z_bot": 0.0,
+        "radius_shaft": 0.085,
+        "radius_foot": 0.075
+      },
+      "details": []
+    },
+    {
+      "id": "bota_alta_dir",
+      "category": "fitted_panel",
+      "layer": 6,
+      "material": "couro_bota",
+      "shape": "high_boot",
+      "anchors": [
+        "mixamorig:RightFoot"
+      ],
+      "physics": "fitted",
+      "thickness": 0.005,
+      "z_offset": 0.0,
+      "params": {
+        "side": "right",
+        "z_top": 0.35,
+        "z_bot": 0.0,
+        "radius_shaft": 0.085,
+        "radius_foot": 0.075
+      },
+      "details": []
+    },
+    {
+      "id": "saia_lace_preta_L3",
+      "category": "cloth_layer",
+      "layer": 7,
+      "material": "preto_lace",
+      "shape": "tiered_lace_skirt",
+      "anchors": [
+        "mixamorig:Hips"
+      ],
+      "physics": "cloth",
+      "thickness": 0.003,
+      "z_offset": 0.0,
+      "params": {
+        "waist_radius": 0.27,
+        "hem_radius": 0.95,
+        "z_top": 1.05,
+        "z_bot": 0.35,
+        "tiers": 3
+      },
+      "details": []
+    },
+    {
+      "id": "saia_cream_underskirt",
+      "category": "cloth_layer",
+      "layer": 8,
+      "material": "creme_underdress",
+      "shape": "skirt_ring",
+      "anchors": [
+        "mixamorig:Hips"
+      ],
+      "physics": "cloth",
+      "thickness": 0.003,
+      "z_offset": 0.0,
+      "params": {
+        "waist_radius": 0.27,
+        "hem_radius": 0.85,
+        "length": 0.6500000000000001,
+        "folds": 36,
+        "segments": 120
+      },
+      "details": []
+    },
+    {
+      "id": "saia_teal_L1_principal",
+      "category": "cloth_layer",
+      "layer": 9,
+      "material": "teal_principal",
+      "shape": "skirt_ring",
+      "anchors": [
+        "mixamorig:Hips"
+      ],
+      "physics": "cloth",
+      "thickness": 0.004,
+      "z_offset": 0.0,
+      "params": {
+        "waist_radius": 0.27,
+        "hem_radius": 0.78,
+        "length": 0.55,
+        "folds": 42,
+        "segments": 144,
+        "front_gap": 0.3
+      },
+      "details": []
+    },
+    {
+      "id": "saia_teal_drape_lateral",
+      "category": "cloth_panel",
+      "layer": 10,
+      "material": "teal_principal",
+      "shape": "drape_side_asym",
+      "anchors": [
+        "mixamorig:Hips"
+      ],
+      "physics": "cloth",
+      "thickness": 0.004,
+      "z_offset": 0.0,
+      "params": {
+        "side": "right",
+        "z_top": 1.08,
+        "z_bot": 0.7,
+        "width_top": 0.18,
+        "width_bot": 0.35
+      },
+      "details": []
+    },
+    {
+      "id": "sash_faixa_cintura",
+      "category": "fitted_panel",
+      "layer": 11,
+      "material": "teal_principal",
+      "shape": "sash_band",
+      "anchors": [
+        "mixamorig:Spine"
+      ],
+      "physics": "fitted",
+      "thickness": 0.005,
+      "z_offset": 0.0,
+      "params": {
+        "z_top": 1.13,
+        "z_bot": 1.03,
+        "radius_x": 0.24,
+        "radius_y": 0.17
+      },
+      "details": []
+    },
+    {
+      "id": "laco_costas_grande",
+      "category": "fitted_panel",
+      "layer": 12,
+      "material": "teal_principal",
+      "shape": "bow_3d",
+      "anchors": [
+        "mixamorig:Spine"
+      ],
+      "physics": "none",
+      "thickness": 0.004,
+      "z_offset": 0.0,
+      "params": {
+        "z": 1.125,
+        "width": 0.34,
+        "height": 0.22,
+        "depth": 0.1
+      },
+      "details": []
+    },
+    {
+      "id": "corpete_teal_principal",
+      "category": "fitted_panel",
+      "layer": 13,
+      "material": "teal_principal",
+      "shape": "corset",
+      "anchors": [
+        "mixamorig:Spine1"
+      ],
+      "physics": "fitted",
+      "thickness": 0.005,
+      "z_offset": 0.0,
+      "params": {
+        "waist_radius": 0.2,
+        "bust_radius": 0.27,
+        "height": 0.22999999999999998
+      },
+      "details": []
+    },
+    {
+      "id": "manga_puff_esq",
+      "category": "sleeve",
+      "layer": 14,
+      "material": "teal_principal",
+      "shape": "puff_sleeve",
+      "anchors": [
+        "mixamorig:LeftArm"
+      ],
+      "physics": "cloth",
+      "thickness": 0.004,
+      "z_offset": 0.0,
+      "params": {
+        "side": "left",
+        "radius": 0.16,
+        "length": 0.22,
+        "puffs": 10
+      },
+      "details": []
+    },
+    {
+      "id": "manga_puff_dir",
+      "category": "sleeve",
+      "layer": 15,
+      "material": "teal_principal",
+      "shape": "puff_sleeve",
+      "anchors": [
+        "mixamorig:RightArm"
+      ],
+      "physics": "cloth",
+      "thickness": 0.004,
+      "z_offset": 0.0,
+      "params": {
+        "side": "right",
+        "radius": 0.16,
+        "length": 0.22,
+        "puffs": 10
+      },
+      "details": []
+    },
+    {
+      "id": "luva_curta_esq",
+      "category": "fitted_panel",
+      "layer": 16,
+      "material": "couro_bota",
+      "shape": "glove_forearm",
+      "anchors": [
+        "mixamorig:LeftHand"
+      ],
+      "physics": "fitted",
+      "thickness": 0.003,
+      "z_offset": 0.0,
+      "params": {
+        "side": "left",
+        "z_top": 1.62,
+        "z_bot": 1.45,
+        "radius": 0.055
+      },
+      "details": []
+    },
+    {
+      "id": "luva_curta_dir",
+      "category": "fitted_panel",
+      "layer": 17,
+      "material": "couro_bota",
+      "shape": "glove_forearm",
+      "anchors": [
+        "mixamorig:RightHand"
+      ],
+      "physics": "fitted",
+      "thickness": 0.003,
+      "z_offset": 0.0,
+      "params": {
+        "side": "right",
+        "z_top": 1.62,
+        "z_bot": 1.45,
+        "radius": 0.055
+      },
+      "details": []
+    },
+    {
+      "id": "choker_decote",
+      "category": "fitted_panel",
+      "layer": 18,
+      "material": "teal_principal",
+      "shape": "choker_band",
+      "anchors": [
+        "mixamorig:Neck"
+      ],
+      "physics": "fitted",
+      "thickness": 0.002,
+      "z_offset": 0.0,
+      "params": {
+        "z": 1.455,
+        "radius": 0.058,
+        "height": 0.028
+      },
+      "details": []
+    }
+  ],
+  "accessories": [
+    {
+      "id": "corpete_teal_principal_laces",
+      "category": "cord",
+      "layer": 14,
+      "material": "ouro_metal",
+      "shape": "lace_cross_corset",
+      "parent_piece": "corpete_teal_principal",
+      "params": {
+        "width": 0.18,
+        "count": 7,
+        "z_min": 1.12,
+        "z_max": 1.31
+      }
+    },
+    {
+      "id": "choker_decote_gem",
+      "category": "gem",
+      "layer": 19,
+      "material": "ouro_metal",
+      "shape": "pendant_sphere",
+      "parent_piece": "choker_decote",
+      "params": {
+        "x": 0,
+        "y": -0.058,
+        "z": 1.455,
+        "radius": 0.014
+      }
+    },
+    {
+      "id": "chapeu_coquinho_top",
+      "category": "hat",
+      "layer": 19,
+      "material": "teal_principal",
+      "shape": "mini_top_hat",
+      "parent_piece": null,
+      "params": {
+        "tilt": -0.18,
+        "z": 1.835,
+        "off_x": 0.04,
+        "radius_crown": 0.06,
+        "height_crown": 0.1,
+        "radius_brim": 0.1
+      }
+    },
+    {
+      "id": "relogio_cintura_pendant",
+      "category": "clock",
+      "layer": 20,
+      "material": "ouro_metal",
+      "shape": "pocket_watch",
+      "parent_piece": null,
+      "params": {
+        "side": "right",
+        "radius": 0.045,
+        "z": 1.1
+      }
+    },
+    {
+      "id": "chave_colar_pendant",
+      "category": "pendant",
+      "layer": 21,
+      "material": "ouro_metal",
+      "shape": "pendant_key",
+      "parent_piece": null,
+      "params": {
+        "x": 0,
+        "y": -0.12,
+        "z": 1.44,
+        "shaft": 0.06,
+        "bow_r": 0.014
+      }
+    },
+    {
+      "id": "cartas_charm_pendant",
+      "category": "charm",
+      "layer": 22,
+      "material": "paper_card",
+      "shape": "pendant_cards_charm",
+      "parent_piece": null,
+      "params": {
+        "x": 0.22,
+        "y": -0.2,
+        "z": 1.225,
+        "count": 3
+      }
+    }
+  ],
+  "build_order": [
+    "bloomer_interno",
+    "chemise_branca_torso",
+    "chemise_branca_skirt",
+    "meia_listrada_esq",
+    "meia_listrada_dir",
+    "bota_alta_esq",
+    "bota_alta_dir",
+    "saia_lace_preta_L3",
+    "saia_cream_underskirt",
+    "saia_teal_L1_principal",
+    "saia_teal_drape_lateral",
+    "sash_faixa_cintura",
+    "laco_costas_grande",
+    "corpete_teal_principal",
+    "manga_puff_esq",
+    "manga_puff_dir",
+    "luva_curta_esq",
+    "luva_curta_dir",
+    "choker_decote",
+    "corpete_teal_principal_laces",
+    "choker_decote_gem",
+    "chapeu_coquinho_top",
+    "relogio_cintura_pendant",
+    "chave_colar_pendant",
+    "cartas_charm_pendant"
+  ],
+  "notes": [
+    "Inside-Out 22 pecas Alice Chapeleiro",
+    "Build piece-by-piece via build_single_piece(bp, piece_id)",
+    "Refs costureira em C:/Users/pslo9/Downloads/Alice chapeleiro/"
+  ]
+}

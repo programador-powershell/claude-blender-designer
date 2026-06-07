@@ -1,0 +1,454 @@
+{
+  "outfit_id": "alice_dark_dress_layered",
+  "display_name": "Alice Liddell — Dark Layered Dress",
+  "version": "1.0",
+  "scale": "1 BU = 1 meter",
+  "target_character": "Alice_Base",
+  "materials": [
+    {
+      "id": "ivory_fabric",
+      "color": [
+        0.78,
+        0.72,
+        0.62,
+        1
+      ],
+      "roughness": 0.78,
+      "metallic": 0,
+      "alpha": 1.0
+    },
+    {
+      "id": "dark_blue_fabric",
+      "color": [
+        0.015,
+        0.025,
+        0.055,
+        1
+      ],
+      "roughness": 0.82,
+      "metallic": 0,
+      "alpha": 1.0
+    },
+    {
+      "id": "black_lace",
+      "color": [
+        0.005,
+        0.004,
+        0.006,
+        0.78
+      ],
+      "roughness": 0.9,
+      "metallic": 0,
+      "alpha": 1.0
+    },
+    {
+      "id": "aged_gold",
+      "color": [
+        0.9,
+        0.63,
+        0.26,
+        1
+      ],
+      "roughness": 0.38,
+      "metallic": 0.8,
+      "alpha": 1.0
+    },
+    {
+      "id": "black_leather",
+      "color": [
+        0.01,
+        0.008,
+        0.006,
+        1
+      ],
+      "roughness": 0.5,
+      "metallic": 0.05,
+      "alpha": 1.0
+    },
+    {
+      "id": "blood_red",
+      "color": [
+        0.35,
+        0.01,
+        0.015,
+        1
+      ],
+      "roughness": 0.58,
+      "metallic": 0,
+      "alpha": 1.0
+    },
+    {
+      "id": "paper_card",
+      "color": [
+        0.82,
+        0.78,
+        0.67,
+        1
+      ],
+      "roughness": 0.7,
+      "metallic": 0,
+      "alpha": 1.0
+    }
+  ],
+  "pieces": [
+    {
+      "id": "base_ivory_bodice",
+      "category": "fitted_panel",
+      "layer": 1,
+      "material": "ivory_fabric",
+      "shape": "torso_shell",
+      "anchors": [
+        "spine",
+        "chest",
+        "neck"
+      ],
+      "physics": "fitted",
+      "thickness": 0.004,
+      "z_offset": 0.0,
+      "params": {
+        "neck": "deep_v"
+      },
+      "details": []
+    },
+    {
+      "id": "dark_corset",
+      "category": "fitted_panel",
+      "layer": 2,
+      "material": "black_leather",
+      "shape": "corset",
+      "anchors": [
+        "spine",
+        "chest",
+        "waist"
+      ],
+      "physics": "fitted",
+      "thickness": 0.006,
+      "z_offset": 0.0,
+      "params": {
+        "waist_radius": 0.26,
+        "bust_radius": 0.38,
+        "height": 0.46
+      },
+      "details": []
+    },
+    {
+      "id": "inner_black_petticoat",
+      "category": "cloth_layer",
+      "layer": 3,
+      "material": "black_lace",
+      "shape": "skirt_ring",
+      "anchors": [
+        "hips",
+        "waist"
+      ],
+      "physics": "cloth",
+      "thickness": 0.003,
+      "z_offset": 0.0,
+      "params": {
+        "waist_radius": 0.28,
+        "hem_radius": 0.92,
+        "length": 0.72,
+        "folds": 36,
+        "segments": 144
+      },
+      "details": []
+    },
+    {
+      "id": "ivory_front_apron",
+      "category": "cloth_panel",
+      "layer": 4,
+      "material": "ivory_fabric",
+      "shape": "front_panel",
+      "anchors": [
+        "waist"
+      ],
+      "physics": "cloth",
+      "thickness": 0.004,
+      "z_offset": 0.0,
+      "params": {
+        "width_top": 0.36,
+        "width_bottom": 0.54,
+        "length": 0.68,
+        "z_top": 0.92,
+        "curve": 0.08
+      },
+      "details": []
+    },
+    {
+      "id": "outer_dark_skirt",
+      "category": "cloth_layer",
+      "layer": 5,
+      "material": "dark_blue_fabric",
+      "shape": "skirt_ring",
+      "anchors": [
+        "hips",
+        "waist"
+      ],
+      "physics": "cloth",
+      "thickness": 0.004,
+      "z_offset": 0.0,
+      "params": {
+        "waist_radius": 0.31,
+        "hem_radius": 1.05,
+        "length": 0.77,
+        "folds": 42,
+        "segments": 168,
+        "front_gap": 0.42
+      },
+      "details": []
+    },
+    {
+      "id": "side_overskirt_left",
+      "category": "cloth_panel",
+      "layer": 6,
+      "material": "dark_blue_fabric",
+      "shape": "side_panel",
+      "anchors": [
+        "waist"
+      ],
+      "physics": "cloth",
+      "thickness": 0.004,
+      "z_offset": 0.0,
+      "params": {
+        "side": "left",
+        "width_top": 0.25,
+        "width_bottom": 0.48,
+        "length": 0.62
+      },
+      "details": []
+    },
+    {
+      "id": "side_overskirt_right",
+      "category": "cloth_panel",
+      "layer": 6,
+      "material": "dark_blue_fabric",
+      "shape": "side_panel",
+      "anchors": [
+        "waist"
+      ],
+      "physics": "cloth",
+      "thickness": 0.004,
+      "z_offset": 0.0,
+      "params": {
+        "side": "right",
+        "width_top": 0.25,
+        "width_bottom": 0.48,
+        "length": 0.62
+      },
+      "details": []
+    },
+    {
+      "id": "back_bow_panel",
+      "category": "cloth_panel",
+      "layer": 7,
+      "material": "dark_blue_fabric",
+      "shape": "bow_tail",
+      "anchors": [
+        "spine",
+        "waist"
+      ],
+      "physics": "cloth",
+      "thickness": 0.004,
+      "z_offset": 0.0,
+      "params": {
+        "width": 0.62,
+        "length": 0.52,
+        "z_top": 0.98
+      },
+      "details": []
+    },
+    {
+      "id": "puff_sleeve_left",
+      "category": "sleeve",
+      "layer": 8,
+      "material": "dark_blue_fabric",
+      "shape": "puff_sleeve",
+      "anchors": [
+        "left_upper_arm",
+        "shoulder"
+      ],
+      "physics": "cloth",
+      "thickness": 0.004,
+      "z_offset": 0.0,
+      "params": {
+        "side": "left",
+        "radius": 0.18,
+        "length": 0.24,
+        "puffs": 10
+      },
+      "details": []
+    },
+    {
+      "id": "puff_sleeve_right",
+      "category": "sleeve",
+      "layer": 8,
+      "material": "dark_blue_fabric",
+      "shape": "puff_sleeve",
+      "anchors": [
+        "right_upper_arm",
+        "shoulder"
+      ],
+      "physics": "cloth",
+      "thickness": 0.004,
+      "z_offset": 0.0,
+      "params": {
+        "side": "right",
+        "radius": 0.18,
+        "length": 0.24,
+        "puffs": 10
+      },
+      "details": []
+    },
+    {
+      "id": "lace_hem_outer",
+      "category": "trim",
+      "layer": 9,
+      "material": "black_lace",
+      "shape": "hem_ruffle_ring",
+      "anchors": [
+        "outer_dark_skirt"
+      ],
+      "physics": "cloth",
+      "thickness": 0.002,
+      "z_offset": 0.0,
+      "params": {
+        "radius": 1.06,
+        "z": 0.18,
+        "height": 0.1,
+        "waves": 56
+      },
+      "details": []
+    },
+    {
+      "id": "lace_hem_inner",
+      "category": "trim",
+      "layer": 9,
+      "material": "black_lace",
+      "shape": "hem_ruffle_ring",
+      "anchors": [
+        "inner_black_petticoat"
+      ],
+      "physics": "cloth",
+      "thickness": 0.002,
+      "z_offset": 0.0,
+      "params": {
+        "radius": 0.94,
+        "z": 0.16,
+        "height": 0.08,
+        "waves": 48
+      },
+      "details": []
+    }
+  ],
+  "accessories": [
+    {
+      "id": "front_lacing_cross",
+      "category": "cord",
+      "layer": 10,
+      "material": "aged_gold",
+      "shape": "corset_lacing",
+      "parent_piece": "dark_corset",
+      "params": {
+        "count": 7,
+        "width": 0.19,
+        "z_min": 1.05,
+        "z_max": 1.38
+      }
+    },
+    {
+      "id": "waist_belt",
+      "category": "belt",
+      "layer": 11,
+      "material": "black_leather",
+      "shape": "torus_belt",
+      "parent_piece": "dark_corset",
+      "params": {
+        "radius_x": 0.34,
+        "radius_y": 0.24,
+        "z": 0.93
+      }
+    },
+    {
+      "id": "clock_left_hip",
+      "category": "clock",
+      "layer": 12,
+      "material": "aged_gold",
+      "shape": "pocket_watch",
+      "parent_piece": "outer_dark_skirt",
+      "params": {
+        "side": "left",
+        "radius": 0.075,
+        "z": 0.78
+      }
+    },
+    {
+      "id": "card_motifs_skirt",
+      "category": "cards",
+      "layer": 13,
+      "material": "paper_card",
+      "shape": "scattered_cards",
+      "parent_piece": "outer_dark_skirt",
+      "params": {
+        "count": 18,
+        "radius": 0.88
+      }
+    },
+    {
+      "id": "gold_embroidery_curves",
+      "category": "embroidery",
+      "layer": 14,
+      "material": "aged_gold",
+      "shape": "embroidery_curves",
+      "parent_piece": "outer_dark_skirt",
+      "params": {
+        "count": 26
+      }
+    },
+    {
+      "id": "red_rose_brooches",
+      "category": "brooches",
+      "layer": 15,
+      "material": "blood_red",
+      "shape": "rose_brooches",
+      "parent_piece": "outer_dark_skirt",
+      "params": {
+        "count": 7
+      }
+    },
+    {
+      "id": "mini_hat",
+      "category": "hat",
+      "layer": 18,
+      "material": "dark_blue_fabric",
+      "shape": "mini_top_hat",
+      "parent_piece": null,
+      "params": {
+        "tilt": -0.18
+      }
+    }
+  ],
+  "build_order": [
+    "base_ivory_bodice",
+    "dark_corset",
+    "inner_black_petticoat",
+    "ivory_front_apron",
+    "outer_dark_skirt",
+    "side_overskirt_left",
+    "side_overskirt_right",
+    "back_bow_panel",
+    "puff_sleeve_left",
+    "puff_sleeve_right",
+    "lace_hem_outer",
+    "lace_hem_inner",
+    "front_lacing_cross",
+    "waist_belt",
+    "clock_left_hip",
+    "card_motifs_skirt",
+    "gold_embroidery_curves",
+    "red_rose_brooches",
+    "mini_hat"
+  ],
+  "notes": [
+    "Blueprint inicial: refine com tracing manual para fidelidade perfeita."
+  ]
+}
