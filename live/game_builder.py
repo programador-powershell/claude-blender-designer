@@ -1886,3 +1886,291 @@ def compile_professional_character_pipeline(ai_glb_path, template_path=None, mas
                        "sliced": sliced,
                        "binding": bind,
                        "vestido": ai_mesh.name})
+
+
+# ===========================================================================
+# apply_layer_spec — consome JSON do pipeline_layer_inspector + constroi camada
+# proceduralmente sobre Alice_Base_Body. Cada camada usa color palette p/ material,
+# texture_map p/ bump, curves p/ outline (futuro: loft 3D direto dos pontos).
+# ===========================================================================
+
+# Geometria default por nome de camada (z_hem, z_top, n_ring, n_h, hem_radius, palette_swap)
+LAYER_PRESETS = {
+    "saia_L1":    {"z_hem": 0.45, "z_top": 1.10, "n_ring": 96, "n_h": 26,
+                   "waist_rx": 0.115, "waist_ry": 0.075, "hem_rx": 0.345, "hem_ry": 0.300, "power": 2.0},
+    "saia_L2":    {"z_hem": 0.55, "z_top": 1.10, "n_ring": 96, "n_h": 22,
+                   "waist_rx": 0.115, "waist_ry": 0.075, "hem_rx": 0.320, "hem_ry": 0.280, "power": 2.0},
+    "saia_L3":    {"z_hem": 0.65, "z_top": 1.10, "n_ring": 96, "n_h": 18,
+                   "waist_rx": 0.115, "waist_ry": 0.075, "hem_rx": 0.300, "hem_ry": 0.260, "power": 2.0},
+    "corpete":    {"z_hem": 1.05, "z_top": 1.32, "n_ring": 96, "n_h": 22,
+                   "waist_rx": 0.110, "waist_ry": 0.075, "hem_rx": 0.155, "hem_ry": 0.110, "power": 1.0},
+    "mangas":     {"z_hem": 1.32, "z_top": 1.42, "n_ring": 48, "n_h": 10,
+                   "waist_rx": 0.040, "waist_ry": 0.040, "hem_rx": 0.080, "hem_ry": 0.080, "power": 1.0},
+    "boots":      {"z_hem": 0.00, "z_top": 0.30, "n_ring": 48, "n_h": 10,
+                   "waist_rx": 0.055, "waist_ry": 0.055, "hem_rx": 0.075, "hem_ry": 0.075, "power": 1.0},
+}
+
+def _build_aline_mesh(name, preset, parent_armature):
+    """Cria mesh A-line lofted (cintura -> barra) parented ao Armature."""
+    import math
+    h = preset
+    verts = []
+    faces = []
+    for i in range(h["n_h"]):
+        t = i / (h["n_h"] - 1)
+        z = h["z_hem"] + (h["z_top"] - h["z_hem"]) * t
+        s = ((h["z_top"] - z) / (h["z_top"] - h["z_hem"])) ** h["power"]
+        rx = h["waist_rx"] + (h["hem_rx"] - h["waist_rx"]) * s
+        ry = h["waist_ry"] + (h["hem_ry"] - h["waist_ry"]) * s
+        for j in range(h["n_ring"]):
+            a = 2 * math.pi * j / h["n_ring"]
+            verts.append((rx * math.cos(a), ry * math.sin(a), z))
+    for ri in range(h["n_h"] - 1):
+        for j in range(h["n_ring"]):
+            A = ri * h["n_ring"] + j
+            B = ri * h["n_ring"] + (j + 1) % h["n_ring"]
+            C = (ri + 1) * h["n_ring"] + (j + 1) % h["n_ring"]
+            D = (ri + 1) * h["n_ring"] + j
+            faces.append((A, B, C, D))
+    old = bpy.data.objects.get(name)
+    if old:
+        bpy.data.objects.remove(old, do_unlink=True)
+    me = bpy.data.meshes.new(name)
+    me.from_pydata(verts, [], faces)
+    me.update()
+    o = bpy.data.objects.new(name, me)
+    bpy.context.collection.objects.link(o)
+    for p in me.polygons:
+        p.use_smooth = True
+    if parent_armature:
+        o.parent = parent_armature
+        o.matrix_parent_inverse = parent_armature.matrix_world.inverted()
+        vg = o.vertex_groups.new(name="mixamorig:Hips")
+        vg.add(list(range(len(me.vertices))), 1.0, 'REPLACE')
+        md = o.modifiers.new("Armature", 'ARMATURE')
+        md.object = parent_armature
+    sub = o.modifiers.new("Subsurf", 'SUBSURF')
+    sub.levels = 1; sub.render_levels = 2
+    return o
+
+def _palette_to_material(name, palette_list):
+    """Cria material com cor dominante + emit secundaria baseado em palette spec."""
+    if not palette_list: palette_list = [{"rgb": [120, 120, 120]}]
+    dom = palette_list[0]["rgb"]
+    mat = bpy.data.materials.get(name) or bpy.data.materials.new(name)
+    mat.use_nodes = True
+    bsdf = mat.node_tree.nodes.get('Principled BSDF')
+    if bsdf:
+        bsdf.inputs['Base Color'].default_value = (dom[0]/255, dom[1]/255, dom[2]/255, 1)
+        try: bsdf.inputs['Roughness'].default_value = 0.55
+        except Exception: pass
+    return mat
+
+def _load_palette_from_inspector(spec_dict, view="front"):
+    """Tenta ler color palette do PNG de swatches: amostra cor a cada 80px (cellsize do swatch)."""
+    images = spec_dict.get(view, {}).get("images", {})
+    swatch_path = images.get("palette")
+    if not swatch_path or not os.path.exists(swatch_path):
+        return []
+    import numpy as np
+    try:
+        img = bpy.data.images.load(swatch_path, check_existing=True)
+        W, H = img.size
+        px = np.array(img.pixels[:]).reshape(H, W, 4)
+        # cellsize 80
+        ncols = max(1, W // 80)
+        pal = []
+        for i in range(ncols):
+            cx = i * 80 + 40
+            if cx >= W: break
+            sample = px[H//3:2*H//3, cx]
+            mean = sample.mean(axis=0)
+            r, g, b = int(mean[0]*255), int(mean[1]*255), int(mean[2]*255)
+            pal.append({"rgb": [r, g, b]})
+        return pal
+    except Exception as e:
+        print("palette load err:", e)
+        return []
+
+def apply_layer_spec(layer_name, spec_path):
+    """Consome layer_spec.json (do pipeline_layer_inspector) + constroi a camada
+    sobre Alice_Base_Body. Geometria do preset, material do color palette do inspetor."""
+    if not os.path.exists(spec_path):
+        return json.dumps({"err": f"spec nao existe: {spec_path}"})
+    with open(spec_path, "r", encoding="utf-8") as f:
+        spec = json.load(f)
+    preset = LAYER_PRESETS.get(layer_name)
+    if not preset:
+        return json.dumps({"err": f"layer '{layer_name}' sem preset",
+                           "known": list(LAYER_PRESETS.keys())})
+    arm = bpy.data.objects.get("Alice_Base_Rig") or bpy.data.objects.get("Armature")
+    if not arm:
+        return json.dumps({"err": "Alice_Base_Rig nao encontrado"})
+    obj_name = f"Layer_{layer_name}"
+    o = _build_aline_mesh(obj_name, preset, arm)
+    palette = _load_palette_from_inspector(spec, "front")
+    mat = _palette_to_material(f"{layer_name}_mat", palette)
+    o.data.materials.clear()
+    o.data.materials.append(mat)
+    # viewport tag redraw
+    for w in bpy.context.window_manager.windows:
+        for a in w.screen.areas:
+            if a.type == 'VIEW_3D': a.tag_redraw()
+    return json.dumps({"status": "OK",
+                       "layer": layer_name,
+                       "obj": obj_name,
+                       "verts": len(o.data.vertices),
+                       "color_dom_rgb": palette[0]["rgb"] if palette else None,
+                       "spec_views": list(spec.keys())})
+
+
+# ===========================================================================
+# Inside-Out Assembly: SAM mascaras ordenadas por area (grande -> pequeno)
+# Camada 1 = vestido base (maior mask, data transfer pesos do corpo)
+# Camada 2 = harness/corpete (shrinkwrap sobre vestido +2mm)
+# Camada 3+ = props rigidos (find_nearest_bone + bind 1.0)
+# ===========================================================================
+
+def _mask_white_pixel_count(filepath):
+    try:
+        img = bpy.data.images.load(filepath, check_existing=False)
+        pixels = list(img.pixels)
+        white = sum(1 for i in range(0, len(pixels), 4) if pixels[i] > 0.5)
+        bpy.data.images.remove(img)
+        return white
+    except Exception:
+        return 0
+
+def compile_complex_layered_character(glb_path, template_path=None, masks_dir=None,
+                                       base_prefix="alice", clean_scene=True):
+    """Inside-Out assembly. Importa GLB, importa base humano, ordena masks por area,
+    fatia + binda camadas progressivamente (skin -> base layer -> harness -> props)."""
+    import bmesh, glob
+    from mathutils import Vector
+
+    if clean_scene:
+        for o in list(bpy.data.objects):
+            bpy.data.objects.remove(o, do_unlink=True)
+
+    bpy.ops.import_scene.gltf(filepath=glb_path)
+    ai_meshes = [o for o in bpy.context.selected_objects if o.type == 'MESH']
+    if not ai_meshes:
+        return json.dumps({"err": "GLB sem mesh"})
+    ai_mesh = ai_meshes[0]
+    ai_mesh.name = "AI_Raw_Mold"
+
+    base_body, base_arm = load_clean_base_mesh(template_path)
+    if not base_body or not base_arm:
+        return json.dumps({"err": "base humano nao carregou"})
+
+    prop = match_proportions(ai_mesh, base_arm)
+
+    if not masks_dir or not os.path.exists(masks_dir):
+        return json.dumps({"err": "masks_dir invalido"})
+
+    pattern = os.path.join(masks_dir, f"{base_prefix}_mask_*.png")
+    mask_files = glob.glob(pattern)
+    sorted_masks = []
+    for p in mask_files:
+        sz = _mask_white_pixel_count(p)
+        if sz > 500:
+            sorted_masks.append((p, sz))
+    sorted_masks.sort(key=lambda x: x[1], reverse=True)
+
+    created = []
+    previous_target = base_body
+
+    for idx, (mask_path, size) in enumerate(sorted_masks):
+        mask_img = bpy.data.images.load(mask_path)
+        W, H = mask_img.size
+        pixels = list(mask_img.pixels)
+
+        bpy.context.view_layer.objects.active = ai_mesh
+        bpy.ops.object.mode_set(mode='EDIT')
+        bm = bmesh.from_edit_mesh(ai_mesh.data)
+        uv_layer = bm.loops.layers.uv.active
+        if uv_layer is None:
+            bpy.ops.object.mode_set(mode='OBJECT')
+            bpy.data.images.remove(mask_img)
+            continue
+        bpy.ops.mesh.select_all(action='DESELECT')
+        for face in bm.faces:
+            for loop in face.loops:
+                uv = loop[uv_layer].uv
+                px = min(int(uv.x * W), W - 1)
+                py = min(int(uv.y * H), H - 1)
+                pix_idx = (py * W + px) * 4
+                if pixels[pix_idx] > 0.5:
+                    face.select_set(True)
+                    break
+        bmesh.update_edit_mesh(ai_mesh.data)
+
+        if not any(f.select for f in bm.faces):
+            bpy.ops.object.mode_set(mode='OBJECT')
+            bpy.data.images.remove(mask_img)
+            continue
+
+        bpy.ops.mesh.separate(type='SELECTED')
+        bpy.ops.object.mode_set(mode='OBJECT')
+        layer_obj = [o for o in bpy.context.selected_objects if o != ai_mesh][-1]
+
+        if idx == 0:
+            layer_obj.name = "AAA_Camada1_VestidoBase"
+            sol = layer_obj.modifiers.new("Espessura", 'SOLIDIFY')
+            sol.thickness = 0.001
+            arm_mod = layer_obj.modifiers.new("Rig_Armature", 'ARMATURE')
+            arm_mod.object = base_arm
+            dt = layer_obj.modifiers.new("Pesos_Anatomo", 'DATA_TRANSFER')
+            dt.object = base_body
+            dt.use_vert_data = True
+            dt.data_types_verts = {'VGROUP_WEIGHTS'}
+            dt.vert_mapping = 'NEAREST'
+            bpy.context.view_layer.objects.active = layer_obj
+            try:
+                bpy.ops.object.datalayout_transfer(modifier="Pesos_Anatomo")
+            except Exception:
+                pass
+            bpy.ops.object.modifier_apply(modifier="Pesos_Anatomo")
+            previous_target = layer_obj
+        elif idx == 1:
+            layer_obj.name = "AAA_Camada2_HarnessPreto"
+            sw = layer_obj.modifiers.new("Abracar_Vestido", 'SHRINKWRAP')
+            sw.target = previous_target
+            sw.wrap_method = 'NEAREST_SURFACEPOINT'
+            sw.offset = 0.002
+            arm_mod = layer_obj.modifiers.new("Rig_Armature", 'ARMATURE')
+            arm_mod.object = base_arm
+            dt = layer_obj.modifiers.new("Pesos_Harness", 'DATA_TRANSFER')
+            dt.object = base_body
+            dt.use_vert_data = True
+            dt.data_types_verts = {'VGROUP_WEIGHTS'}
+            dt.vert_mapping = 'NEAREST'
+            bpy.context.view_layer.objects.active = layer_obj
+            try:
+                bpy.ops.object.datalayout_transfer(modifier="Pesos_Harness")
+            except Exception:
+                pass
+            bpy.ops.object.modifier_apply(modifier="Pesos_Harness")
+        else:
+            layer_obj.name = f"AAA_Camada3_Prop_{idx}"
+            target_bone = find_nearest_bone(layer_obj, base_arm)
+            layer_obj.vertex_groups.clear()
+            vg = layer_obj.vertex_groups.new(name=target_bone)
+            vg.add([v.index for v in layer_obj.data.vertices], 1.0, 'REPLACE')
+            arm_mod = layer_obj.modifiers.new("Rig_Armature", 'ARMATURE')
+            arm_mod.object = base_arm
+
+        created.append({"layer": layer_obj.name, "mask_area_px": size})
+        bpy.context.view_layer.objects.active = ai_mesh
+        bpy.data.images.remove(mask_img)
+
+    bpy.data.objects.remove(ai_mesh, do_unlink=True)
+
+    if not any(m.type == 'COLLISION' for m in base_body.modifiers):
+        base_body.modifiers.new("Pele_Colisao", 'COLLISION')
+
+    return json.dumps({"status": "OK",
+                       "base_body": base_body.name,
+                       "armature": base_arm.name,
+                       "scale": prop,
+                       "layers_created": created})
