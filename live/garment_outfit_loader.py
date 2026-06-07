@@ -73,8 +73,8 @@ def _shape_from_keywords(shape_str: str, name: str, z, level: str):
         return 'choker_band', {'z': (z_top + z_bot) * 0.5, 'radius': 0.058, 'height': 0.028}
     # Bloomer / shorts internos
     if 'bloomer' in s or 'shorts' in s or 'underwear' in s:
-        return 'skirt_ring', {'waist_radius': 0.16, 'hem_radius': 0.18, 'length': z_top - z_bot,
-                              'folds': 12, 'segments': 48}
+        return 'bloomer_shorts', {'z_top': z_top, 'z_bot': z_bot, 'waist_radius': 0.18,
+                                  'leg_radius': 0.085, 'ruffle_h': 0.025}
     # Chemise / vestido base
     if 'chemise' in s or 'inner dress' in s or 'underdress' in s:
         return 'corset', {'waist_radius': 0.16, 'bust_radius': 0.20, 'height': 0.40}

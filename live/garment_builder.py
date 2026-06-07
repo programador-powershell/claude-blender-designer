@@ -136,6 +136,53 @@ def _find_armature(character_name=None):
     arms=[o for o in bpy.data.objects if o.type=='ARMATURE']
     return arms[0] if arms else None
 
+def _bloomer_shorts(name, z_top, z_bot, waist_radius, leg_radius, ruffle_h, mat, coll):
+    """Bloomer: waist band + 2 cylindrical legs + ruffle no hem de cada perna."""
+    verts=[]; faces=[]; seg=24; rings_w=4; rings_l=8
+    z_crotch = z_bot + (z_top - z_bot) * 0.45
+    # Waist band (oval z_top -> z_crotch)
+    for r in range(rings_w+1):
+        t=r/rings_w; z = z_top*(1-t) + z_crotch*t
+        rx = waist_radius*(1.0 - 0.05*t); ry = waist_radius*0.62*(1.0 - 0.05*t)
+        for i in range(seg):
+            a=2*math.pi*i/seg
+            verts.append((rx*math.cos(a), ry*math.sin(a), z))
+    for r in range(rings_w):
+        for i in range(seg):
+            faces.append((r*seg+i, r*seg+(i+1)%seg, (r+1)*seg+(i+1)%seg, (r+1)*seg+i))
+    waist_top_ring = rings_w * seg  # last ring index
+    # 2 leg cylinders puffy (x positive = left, x negative = right)
+    leg_seg = 20
+    for side in [-1, 1]:
+        cx = side * waist_radius * 0.45
+        leg_base = len(verts)
+        for r in range(rings_l+1):
+            t = r/rings_l
+            z = z_crotch*(1-t) + z_bot*t
+            # puffy bulge: max no mid (t=0.55) + flare no hem
+            bulge = 1.0 + 0.45 * math.sin(math.pi * (0.20 + 0.80*t)) + 0.30*t
+            rad = leg_radius * bulge
+            for i in range(leg_seg):
+                a = 2*math.pi*i/leg_seg
+                # pleat radial fold
+                pleat = 1.0 + 0.05 * math.sin(8*a) * (0.3 + 0.7*t)
+                verts.append((cx + rad*pleat*math.cos(a), rad*pleat*0.85*math.sin(a), z))
+        for r in range(rings_l):
+            for i in range(leg_seg):
+                faces.append((leg_base+r*leg_seg+i, leg_base+r*leg_seg+(i+1)%leg_seg,
+                              leg_base+(r+1)*leg_seg+(i+1)%leg_seg, leg_base+(r+1)*leg_seg+i))
+        # Ruffle ring no hem
+        ruffle_base = len(verts)
+        for i in range(leg_seg):
+            a = 2*math.pi*i/leg_seg
+            rr = leg_radius * 1.30 * (1.0 + 0.08*math.sin(8*a))
+            verts.append((cx + rr*math.cos(a), rr*0.85*math.sin(a), z_bot))
+            verts.append((cx + rr*math.cos(a), rr*0.85*math.sin(a), z_bot - ruffle_h))
+        for i in range(leg_seg):
+            j=(i+1)%leg_seg
+            faces.append((ruffle_base+2*i, ruffle_base+2*j, ruffle_base+2*j+1, ruffle_base+2*i+1))
+    return _mesh(name, verts, faces, mat, coll)
+
 def _tube_segment(name, x_center, z_top, z_bot, radius, ry_ratio, segments, mat, coll, stripes=None):
     """Cilindro vertical de altura z_top->z_bot, raio rx=radius ry=radius*ry_ratio."""
     verts=[]; faces=[]; rings=8
@@ -285,6 +332,7 @@ def _build_piece(piece, mats, coll, arm):
     elif piece.shape=='bow_3d': obj=_bow_3d(name,p.get('z',1.12),p.get('width',.32),p.get('height',.22),p.get('depth',.08),mat,coll)
     elif piece.shape=='drape_side_asym': obj=_drape_side_asym(name,p.get('side','right'),p.get('z_top',1.08),p.get('z_bot',.70),p.get('width_top',.18),p.get('width_bot',.35),mat,coll)
     elif piece.shape=='tiered_lace_skirt': obj=_tiered_lace_skirt(name,p.get('waist_radius',.30),p.get('hem_radius',.95),p.get('z_top',1.05),p.get('z_bot',.35),p.get('tiers',3),mat,coll)
+    elif piece.shape=='bloomer_shorts': obj=_bloomer_shorts(name,p.get('z_top',.85),p.get('z_bot',.55),p.get('waist_radius',.18),p.get('leg_radius',.085),p.get('ruffle_h',.025),mat,coll)
     else: obj=_front_panel(name,.25,.45,.5,.95,.03,mat,coll)
     return _mods(obj, piece, arm)
 
