@@ -235,6 +235,62 @@ def _image_projected_shell(name, crop_path, z_top, z_bot, rx, ry, segments, coll
     obj.data.materials.append(m)
     return obj
 
+def attach_garment_to_body(obj_name, body_name='Alice_Base_Body', armature_name='Alice_Base_Rig',
+                            enable_cloth=True, pin_z_threshold=None):
+    """REGRA DURA: roupa segue movimento corpo via Armature+SurfaceDeform+Cloth+Collision.
+    NUNCA mesh estatica flutuando."""
+    _require_bpy()
+    obj = bpy.data.objects.get(obj_name)
+    body = bpy.data.objects.get(body_name)
+    arm = bpy.data.objects.get(armature_name)
+    if not obj or not body or not arm:
+        return json.dumps({'err':'missing obj/body/arm'})
+    # 1. Armature follow (auto-weight transfer from body)
+    has_arm = any(m.type=='ARMATURE' for m in obj.modifiers)
+    if not has_arm:
+        am = obj.modifiers.new('PA_arm','ARMATURE'); am.object = arm
+    # 2. Data Transfer weights from body (so armature deforms us)
+    has_dt = any(m.type=='DATA_TRANSFER' for m in obj.modifiers)
+    if not has_dt:
+        dt = obj.modifiers.new('PA_dt','DATA_TRANSFER'); dt.object = body
+        dt.use_vert_data = True
+        dt.data_types_verts = {'VGROUP_WEIGHTS'}
+        dt.vert_mapping = 'NEAREST'
+        try: bpy.context.view_layer.objects.active = obj; bpy.ops.object.datalayout_transfer(modifier='PA_dt')
+        except Exception: pass
+    # 3. Surface Deform (rigid-stick to body surface)
+    has_sd = any(m.type=='SURFACE_DEFORM' for m in obj.modifiers)
+    if not has_sd:
+        sd = obj.modifiers.new('PA_sd','SURFACE_DEFORM'); sd.target = body
+        try:
+            bpy.context.view_layer.objects.active = obj
+            bpy.ops.object.surfacedeform_bind(modifier='PA_sd')
+        except Exception as e: pass
+    # 4. Body collision (always-on)
+    if not any(m.type=='COLLISION' for m in body.modifiers):
+        col = body.modifiers.new('PA_body_col','COLLISION')
+        try: col.settings.thickness_outer = 0.012
+        except Exception: pass
+    # 5. Cloth sim opcional (saias/mangas)
+    if enable_cloth and not any(m.type=='CLOTH' for m in obj.modifiers):
+        # Pin top vertices (waist anchor)
+        if pin_z_threshold is None:
+            zs = [(obj.matrix_world @ v.co).z for v in obj.data.vertices]
+            pin_z_threshold = max(zs) - (max(zs)-min(zs))*0.20 if zs else 1.0
+        vg = obj.vertex_groups.get('PA_PIN_TOP') or obj.vertex_groups.new(name='PA_PIN_TOP')
+        idx = [v.index for v in obj.data.vertices if (obj.matrix_world @ v.co).z >= pin_z_threshold]
+        if idx: vg.add(idx, 1.0, 'REPLACE')
+        cl = obj.modifiers.new('PA_cl','CLOTH')
+        try:
+            cl.settings.quality = 8; cl.settings.mass = 0.18
+            cl.settings.tension_stiffness = 15; cl.settings.compression_stiffness = 15
+            cl.settings.shear_stiffness = 5; cl.settings.air_damping = 1
+            cl.settings.vertex_group_mass = 'PA_PIN_TOP'
+            cl.collision_settings.use_collision = True
+            cl.collision_settings.distance_min = 0.005
+        except Exception: pass
+    return json.dumps({'ok': obj_name, 'modifiers': [m.type for m in obj.modifiers]})
+
 def _bloomer_shorts(name, z_top, z_bot, waist_radius, leg_radius, ruffle_h, mat, coll):
     """Bloomer: waist band + 2 cylindrical legs + ruffle no hem de cada perna."""
     verts=[]; faces=[]; seg=24; rings_w=4; rings_l=8
@@ -546,9 +602,19 @@ def build_single_piece(bp, piece_id, character_name='Alice_Base', collection_nam
         kind='accessory'
     else:
         return json.dumps({'status':'error','msg':f'piece_id {piece_id} not in blueprint'})
+    # REGRA DURA: roupa segue corpo (Armature+SD+Cloth+Collision)
+    body_obj = bpy.data.objects.get(character_name)
     for o in objs:
+        if o is None: continue
         try: o['project_alice_garment']=bp.outfit_id; o['piece_id']=piece_id
         except Exception: pass
+        if o.type == 'MESH' and arm is not None and body_obj is not None:
+            enable_cloth = (p_match and 'cloth' in (p_match.physics or '')) if p_match else False
+            try:
+                attach_garment_to_body(o.name, body_name=character_name,
+                                        armature_name=arm.name, enable_cloth=enable_cloth)
+            except Exception as e:
+                print(f'WARN attach fail {o.name}: {e}')
     return json.dumps({'status':'success','outfit':bp.outfit_id,'piece_id':piece_id,'kind':kind,
                        'objects':[o.name for o in objs if o is not None],'armature':arm.name if arm else None}, ensure_ascii=False)
 
