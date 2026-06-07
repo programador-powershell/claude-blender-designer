@@ -15,6 +15,7 @@ from garment_schema import OutfitBlueprint, GarmentPiece, AccessoryPiece, Materi
 
 REGISTRY = r"D:/Alice/tools/auto-rig-fix/work/manifests/outfits_registry.json"
 MANIFESTS_DIR = r"D:/Alice/tools/auto-rig-fix/work/manifests"
+FLORENCE_CROPS_DIR = r"D:/Alice/tools/auto-rig-fix/work/florence_masks"
 
 
 def _hex_to_rgba(h, a=1.0):
@@ -160,6 +161,29 @@ def build_blueprint_for(outfit_name: str) -> OutfitBlueprint:
         mat = mat_for(p.get('color_hex'))
         anchors = [p.get('bone_anchor', 'mixamorig:Hips')]
         order = p.get('order', len(pieces) + 1)
+
+        # IMAGE-PROJECTED: se existe crop Florence2, usa shell + UV-projection
+        crop_path = os.path.join(FLORENCE_CROPS_DIR, f"{name}_crop.png")
+        if os.path.exists(crop_path):
+            # Body region defaults by bone anchor
+            bone = (p.get('bone_anchor','') or '').lower()
+            if 'hips' in bone or 'spine' in bone and not 'spine1' in bone and not 'spine2' in bone:
+                rx, ry = 0.22, 0.16
+            elif 'spine1' in bone or 'spine2' in bone or 'chest' in bone:
+                rx, ry = 0.21, 0.14
+            elif 'leg' in bone or 'foot' in bone:
+                rx, ry = 0.10, 0.10
+            elif 'arm' in bone or 'hand' in bone:
+                rx, ry = 0.08, 0.08
+            elif 'neck' in bone or 'head' in bone:
+                rx, ry = 0.10, 0.10
+            else:
+                rx, ry = 0.22, 0.16
+            params = {'crop_path': crop_path, 'z_top': z[1], 'z_bot': z[0],
+                      'rx': rx, 'ry': ry, 'segments': 24, 'front_only': True}
+            pieces.append(GarmentPiece(name, lvl.lower(), order, mat, 'image_projected',
+                                       anchors, 'fitted', 0.002, params=params))
+            continue
 
         # Detecta acessorio
         acc_match = _accessory_from_keywords(shape_str, name, z)

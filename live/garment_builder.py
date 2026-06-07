@@ -136,6 +136,105 @@ def _find_armature(character_name=None):
     arms=[o for o in bpy.data.objects if o.type=='ARMATURE']
     return arms[0] if arms else None
 
+def _image_projected_shell(name, crop_path, z_top, z_bot, rx, ry, segments, coll,
+                            front_only=True):
+    """Shell cilindrico/curvo com UV front-projection + textura RGBA do crop Florence2.
+    Geometria minima — visual vem da textura real do step image (fidelidade pixel-perfect).
+    front_only=True: shell so na frente (y<0), back fica transparent.
+    """
+    verts=[]; faces=[]; uvs_per_face=[]
+    rings=10
+    seg = segments if not front_only else max(segments // 2, 8)
+    # Front arc: ang -pi/2 ate pi/2 (frente do corpo, y<0)
+    a_start = math.pi if front_only else 0
+    a_end   = 2*math.pi if front_only else 2*math.pi
+    a_span  = a_end - a_start
+    for r in range(rings+1):
+        t = r/rings
+        z = z_top*(1-t) + z_bot*t
+        v_uv = t  # UV V coord (top=0, bot=1)
+        for i in range(seg+1 if front_only else seg):
+            a = a_start + a_span * (i / seg if front_only else i / seg)
+            x = rx * math.cos(a)
+            y = ry * math.sin(a)
+            verts.append((x, y, z))
+    cols = (seg+1) if front_only else seg
+    for r in range(rings):
+        for i in range(seg if front_only else seg):
+            i_next = (i+1) if front_only else (i+1)%seg
+            v00 = r*cols+i; v01 = r*cols+i_next
+            v10 = (r+1)*cols+i; v11 = (r+1)*cols+i_next
+            faces.append((v00, v01, v11, v10))
+    # Build mesh
+    me = bpy.data.meshes.new(name+'_Mesh'); me.from_pydata(verts, [], faces); me.update()
+    obj = bpy.data.objects.new(name, me); bpy.context.collection.objects.link(obj)
+    _link(obj, coll)
+    # UV layer: u from horizontal pos in arc, v from vertical
+    uv_layer = me.uv_layers.new(name="UV_FrontProj")
+    poly_loop_idx = 0
+    for poly in me.polygons:
+        for vi in poly.vertices:
+            row = vi // cols
+            col = vi % cols
+            u = col / max(seg, 1)
+            v = row / max(rings, 1)
+            uv_layer.data[poly_loop_idx].uv = (u, v)
+            poly_loop_idx += 1
+    # Material with image texture — drop any old version
+    mname = name + '_imgmat'
+    old_m = bpy.data.materials.get(mname)
+    if old_m:
+        bpy.data.materials.remove(old_m, do_unlink=True)
+    m = bpy.data.materials.new(mname)
+    m.use_nodes = True
+    nt = m.node_tree
+    # Wipe default nodes + start fresh
+    for n in list(nt.nodes):
+        nt.nodes.remove(n)
+    out = nt.nodes.new('ShaderNodeOutputMaterial')
+    bsdf = nt.nodes.new('ShaderNodeBsdfPrincipled')
+    nt.links.new(bsdf.outputs['BSDF'], out.inputs['Surface'])
+    tex = nt.nodes.new('ShaderNodeTexImage')
+    try:
+        # Force reload (drop cache)
+        import os as _os
+        bn = _os.path.basename(crop_path)
+        old = bpy.data.images.get(bn)
+        if old:
+            bpy.data.images.remove(old, do_unlink=True)
+        img = bpy.data.images.load(crop_path, check_existing=False)
+        img.reload()
+        tex.image = img
+    except Exception as e:
+        print(f"WARN load image fail: {e}")
+    if bsdf:
+        nt.links.new(tex.outputs['Color'], bsdf.inputs['Base Color'])
+        if 'Alpha' in bsdf.inputs and 'Alpha' in tex.outputs:
+            nt.links.new(tex.outputs['Alpha'], bsdf.inputs['Alpha'])
+    # Alpha clamp via math node (alpha < 0.5 => 0, >= 0.5 => 1)
+    try:
+        clamp = nt.nodes.new('ShaderNodeMath')
+        clamp.operation = 'GREATER_THAN'; clamp.inputs[1].default_value = 0.5
+        nt.links.new(tex.outputs['Alpha'], clamp.inputs[0])
+        if bsdf and 'Alpha' in bsdf.inputs:
+            for link in list(bsdf.inputs['Alpha'].links):
+                nt.links.remove(link)
+            nt.links.new(clamp.outputs[0], bsdf.inputs['Alpha'])
+    except Exception:
+        pass
+    # EEVEE Next (Blender 4.2+/5.x) uses surface_render_method; older uses blend_method
+    if hasattr(m, 'surface_render_method'):
+        m.surface_render_method = 'DITHERED'
+    if hasattr(m, 'blend_method'):
+        try: m.blend_method = 'CLIP'
+        except Exception: pass
+    if hasattr(m, 'alpha_threshold'):
+        m.alpha_threshold = 0.5
+    m.show_transparent_back = False
+    m.use_backface_culling = False
+    obj.data.materials.append(m)
+    return obj
+
 def _bloomer_shorts(name, z_top, z_bot, waist_radius, leg_radius, ruffle_h, mat, coll):
     """Bloomer: waist band + 2 cylindrical legs + ruffle no hem de cada perna."""
     verts=[]; faces=[]; seg=24; rings_w=4; rings_l=8
@@ -333,6 +432,11 @@ def _build_piece(piece, mats, coll, arm):
     elif piece.shape=='drape_side_asym': obj=_drape_side_asym(name,p.get('side','right'),p.get('z_top',1.08),p.get('z_bot',.70),p.get('width_top',.18),p.get('width_bot',.35),mat,coll)
     elif piece.shape=='tiered_lace_skirt': obj=_tiered_lace_skirt(name,p.get('waist_radius',.30),p.get('hem_radius',.95),p.get('z_top',1.05),p.get('z_bot',.35),p.get('tiers',3),mat,coll)
     elif piece.shape=='bloomer_shorts': obj=_bloomer_shorts(name,p.get('z_top',.85),p.get('z_bot',.55),p.get('waist_radius',.18),p.get('leg_radius',.085),p.get('ruffle_h',.025),mat,coll)
+    elif piece.shape=='image_projected':
+        obj=_image_projected_shell(name, p['crop_path'], p.get('z_top',1.0), p.get('z_bot',0.5),
+                                    p.get('rx',0.22), p.get('ry',0.16), p.get('segments',24), coll,
+                                    front_only=p.get('front_only',True))
+        return _mods(obj, piece, arm)
     else: obj=_front_panel(name,.25,.45,.5,.95,.03,mat,coll)
     return _mods(obj, piece, arm)
 
@@ -458,11 +562,19 @@ def list_pieces_in_order(bp):
     return rows
 
 def remove_piece(piece_id, collection_name=None):
-    """Remove objetos PA_<piece_id>* (rollback de uma peca antes de reconstruir)."""
+    """Remove objetos PA_<piece_id>* + materiais + images (rollback completo)."""
     _require_bpy()
     pref=f'PA_{piece_id}'
     rm=[]
     for o in list(bpy.data.objects):
         if o.name.startswith(pref):
             rm.append(o.name); bpy.data.objects.remove(o, do_unlink=True)
+    # Cleanup orphan materials
+    for mat in list(bpy.data.materials):
+        if mat.name.startswith(pref) and mat.users == 0:
+            bpy.data.materials.remove(mat, do_unlink=True)
+    # Cleanup orphan meshes
+    for me in list(bpy.data.meshes):
+        if me.name.startswith(pref) and me.users == 0:
+            bpy.data.meshes.remove(me, do_unlink=True)
     return json.dumps({'removed':rm})
