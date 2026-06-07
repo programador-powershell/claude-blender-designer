@@ -2481,3 +2481,125 @@ def process_universal_uv_pipeline(mesh_name, masks_directory, base_body_name,
     return json.dumps({"status": "OK",
                        "layers_assembled": len(compiled),
                        "manifest": compiled})
+
+
+# ===========================================================================
+# build_universal_mesh_layers — Matriz Comportamento Fisico 5 Categorias
+# Consome character_assembly_manifest.json (semantic class + bind_target_id +
+# anchor_bone). Categorias: TECIDO_BASE / COURO_COMPRESSAO / METAIS_HARDWARE /
+# ARMAS_PROPS / ACESSORIOS_SUPERFICIE / ACESSORIOS_FLUIDOS.
+# ===========================================================================
+
+def build_universal_mesh_layers(manifest_json_path, mesh_name, base_body_name,
+                                  armature_name=None, masks_dir=None):
+    """Pipeline universal por classe semantica. Lê manifest, isola por mask UV,
+    aplica modificador correto por classe. bind_target_id = ID outra peca como target.
+    anchor_bone = osso especifico (sobrescreve nearest)."""
+    if not os.path.exists(manifest_json_path):
+        return json.dumps({"err": f"manifest nao existe: {manifest_json_path}"})
+    with open(manifest_json_path, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+    stack = manifest.get("character_assembly_manifest", {}).get("execution_stack", [])
+    if not stack:
+        return json.dumps({"err": "stack vazio em character_assembly_manifest.execution_stack"})
+
+    main_obj = bpy.data.objects.get(mesh_name)
+    base_body = bpy.data.objects.get(base_body_name)
+    if not main_obj or not base_body:
+        return json.dumps({"err": f"mesh '{mesh_name}' ou body '{base_body_name}' ausente"})
+    armature_obj = bpy.data.objects.get(armature_name) if armature_name else None
+    if not armature_obj:
+        arm_mod = next((m for m in base_body.modifiers if m.type == 'ARMATURE'), None)
+        armature_obj = arm_mod.object if arm_mod else None
+    if not armature_obj:
+        return json.dumps({"err": "armature nao encontrado"})
+
+    def _resolve_mask(item):
+        m = item.get("uv_mask", "")
+        if os.path.isabs(m) and os.path.exists(m): return m
+        if masks_dir:
+            cand = os.path.join(masks_dir, m)
+            if os.path.exists(cand): return cand
+        return None
+
+    generated = {}  # id -> Object
+
+    # PASSO 1 — TECIDO_BASE (Solidify + Data Transfer)
+    for item in [x for x in stack if x.get("material_class") == "TECIDO_BASE"]:
+        mp = _resolve_mask(item)
+        if not mp: continue
+        layer = _isolate_mesh_by_uv_mask(main_obj, mp)
+        if not layer: continue
+        layer.name = f"BASE_{item.get('semantic_label', item.get('id'))}"
+        sol = layer.modifiers.new("Solidify_Fabric", 'SOLIDIFY')
+        sol.thickness = 0.0015
+        _apply_weight_transfer(layer, base_body)
+        generated[item["id"]] = layer
+
+    # PASSO 2 — COURO_COMPRESSAO (Shrinkwrap sobre bind_target_id)
+    for item in [x for x in stack if x.get("material_class") == "COURO_COMPRESSAO"]:
+        mp = _resolve_mask(item)
+        if not mp: continue
+        layer = _isolate_mesh_by_uv_mask(main_obj, mp)
+        if not layer: continue
+        layer.name = f"COURO_{item.get('semantic_label', item.get('id'))}"
+        target = generated.get(item.get("bind_target_id"), base_body)
+        sw = layer.modifiers.new("Anti_Intersection", 'SHRINKWRAP')
+        sw.target = target
+        sw.offset = 0.0025
+        sw.wrap_method = 'NEAREST_SURFACEPOINT'
+        sw.wrap_mode = 'OUTSIDE_SURFACE'
+        _apply_weight_transfer(layer, base_body)
+        generated[item["id"]] = layer
+
+    # PASSO 3 — METAIS_HARDWARE / ARMAS_PROPS / ACESSORIOS_SUPERFICIE (rigid bone parent)
+    rigid_classes = {"METAIS_HARDWARE", "ARMAS_PROPS", "ACESSORIOS_SUPERFICIE"}
+    for item in [x for x in stack if x.get("material_class") in rigid_classes]:
+        mp = _resolve_mask(item)
+        if not mp: continue
+        layer = _isolate_mesh_by_uv_mask(main_obj, mp)
+        if not layer: continue
+        layer.name = f"RIGID_{item.get('semantic_label', item.get('id'))}"
+        layer.vertex_groups.clear()
+        target_bone = item.get("anchor_bone") or find_nearest_bone(layer, armature_obj)
+        vg = layer.vertex_groups.new(name=target_bone)
+        vg.add([v.index for v in layer.data.vertices], 1.0, 'REPLACE')
+        am = layer.modifiers.new("Rigid_Armature_Bind", 'ARMATURE')
+        am.object = armature_obj
+        # ACESSORIOS_SUPERFICIE bonus: shrinkwrap leve no bind_target pra apoiar
+        if item.get("material_class") == "ACESSORIOS_SUPERFICIE" and item.get("bind_target_id"):
+            tgt = generated.get(item["bind_target_id"])
+            if tgt:
+                sw = layer.modifiers.new("Surface_Cling", 'SHRINKWRAP')
+                sw.target = tgt
+                sw.offset = 0.0010
+                sw.wrap_method = 'NEAREST_SURFACEPOINT'
+                sw.wrap_mode = 'OUTSIDE_SURFACE'
+        generated[item["id"]] = layer
+
+    # PASSO 4 — ACESSORIOS_FLUIDOS (cloth-lite via solidify + single-vertex pin)
+    for item in [x for x in stack if x.get("material_class") == "ACESSORIOS_FLUIDOS"]:
+        mp = _resolve_mask(item)
+        if not mp: continue
+        layer = _isolate_mesh_by_uv_mask(main_obj, mp)
+        if not layer: continue
+        layer.name = f"FLUID_{item.get('semantic_label', item.get('id'))}"
+        sol = layer.modifiers.new("Paper_Thickness", 'SOLIDIFY')
+        sol.thickness = 0.0008
+        target_bone = item.get("anchor_bone") or find_nearest_bone(layer, armature_obj)
+        layer.vertex_groups.clear()
+        vg = layer.vertex_groups.new(name=target_bone)
+        # pin um unico vert (centroide do bbox) ao osso, resto solto
+        import numpy as np
+        co = np.array([(v.co.x, v.co.y, v.co.z) for v in layer.data.vertices])
+        centroid = co.mean(axis=0)
+        nearest_i = int(np.argmin(((co - centroid) ** 2).sum(axis=1)))
+        vg.add([nearest_i], 1.0, 'REPLACE')
+        am = layer.modifiers.new("Pin_Armature", 'ARMATURE')
+        am.object = armature_obj
+        generated[item["id"]] = layer
+
+    return json.dumps({"status": "success",
+                        "layers_built": list(generated.keys()),
+                        "total": len(generated)})
+
