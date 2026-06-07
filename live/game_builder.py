@@ -1603,3 +1603,146 @@ def execute_ultimate_pipeline(generated_file_path, character_name="Alice_Perfeit
     setup_advanced_finger_constraints(arm_name)
     apply_facial_shape_keys(mesh_name)
     return json.dumps({"status":"OK","mesh":mesh_name,"arm":arm_name,"skin":skin_result})
+
+
+def find_nearest_bone(accessory_obj, armature_obj):
+    """Centro de massa do acessorio -> osso mais proximo do esqueleto."""
+    from mathutils import Vector
+    bbox = [accessory_obj.matrix_world @ Vector(corner) for corner in accessory_obj.bound_box]
+    center = sum(bbox, Vector()) / 8.0
+    nearest_bone_name = None
+    min_dist = float('inf')
+    for bone in armature_obj.pose.bones:
+        bone_head_global = armature_obj.matrix_world @ bone.head
+        dist = (center - bone_head_global).length
+        if dist < min_dist:
+            min_dist = dist
+            nearest_bone_name = bone.name
+    return nearest_bone_name
+
+
+def configure_accessory_physics(obj_name, character_mesh_name, tipo):
+    """Bind do acessorio extraido em osso fixo (sem cloth) por tipo."""
+    obj = bpy.data.objects.get(obj_name)
+    if not obj:
+        return
+    obj.vertex_groups.clear()
+    bone_by_type = {
+        "knife": "mixamorig:RightUpLeg",
+        "belts": "mixamorig:Spine1",
+        "gloves": "mixamorig:LeftHand",
+    }
+    bone = bone_by_type.get(tipo, "mixamorig:Hips")
+    vg = obj.vertex_groups.new(name=bone)
+    for v in obj.data.vertices:
+        vg.add([v.index], 1.0, 'REPLACE')
+
+
+def separate_accessories_by_uv_mask(mesh_name, masks_directory, base_name="alice"):
+    """Le mascaras 2D do SAM/ComfyUI, mapeia UV->pixel branco, separa acessorios."""
+    import bmesh
+    main_obj = bpy.data.objects.get(mesh_name)
+    if not main_obj or main_obj.type != 'MESH':
+        return json.dumps({"err": f"mesh {mesh_name} invalido"})
+    config_acessorios = {
+        "knife": {"suffix": "_mask_knife.png", "target_name": "Acessorio_Faca_Rigida"},
+        "belts": {"suffix": "_mask_belts.png", "target_name": "Acessorio_Cintos_Corpo"},
+        "gloves": {"suffix": "_mask_gloves.png", "target_name": "Acessorio_Luvas"},
+    }
+    separated = []
+    for chave, config in config_acessorios.items():
+        mask_path = os.path.join(masks_directory, f"{base_name}{config['suffix']}")
+        if not os.path.exists(mask_path):
+            continue
+        mask_img = bpy.data.images.load(mask_path)
+        W, H = mask_img.size
+        pixels = list(mask_img.pixels)
+        bpy.context.view_layer.objects.active = main_obj
+        bpy.ops.object.mode_set(mode='EDIT')
+        bm = bmesh.from_edit_mesh(main_obj.data)
+        uv_layer = bm.loops.layers.uv.active
+        if uv_layer is None:
+            bpy.ops.object.mode_set(mode='OBJECT')
+            bpy.data.images.remove(mask_img)
+            continue
+        bpy.ops.mesh.select_all(action='DESELECT')
+        for face in bm.faces:
+            sel = False
+            for loop in face.loops:
+                uv = loop[uv_layer].uv
+                px = min(int(uv.x * W), W - 1)
+                py = min(int(uv.y * H), H - 1)
+                idx = (py * W + px) * 4
+                if pixels[idx] > 0.5 and pixels[idx + 1] > 0.5 and pixels[idx + 2] > 0.5:
+                    sel = True
+                    break
+            if sel:
+                face.select_set(True)
+        bmesh.update_edit_mesh(main_obj.data)
+        selected_faces = [f for f in bm.faces if f.select]
+        if selected_faces:
+            bpy.ops.mesh.separate(type='SELECTED')
+            bpy.ops.object.mode_set(mode='OBJECT')
+            new_obj = [o for o in bpy.context.selected_objects if o != main_obj][-1]
+            new_obj.name = config['target_name']
+            configure_accessory_physics(new_obj.name, main_obj.name, chave)
+            separated.append(new_obj.name)
+            bpy.context.view_layer.objects.active = main_obj
+        else:
+            bpy.ops.object.mode_set(mode='OBJECT')
+        bpy.data.images.remove(mask_img)
+    return json.dumps({"status": "OK", "separated": separated})
+
+
+def universal_accessory_slicer(mesh_name, armature_name, masks_directory, base_prefix="alice"):
+    """Versao universal: varre todas as mascaras na pasta + anchora osso mais proximo."""
+    import bmesh
+    import glob
+    main_obj = bpy.data.objects.get(mesh_name)
+    arm_obj = bpy.data.objects.get(armature_name)
+    if not main_obj or not arm_obj:
+        return json.dumps({"err": "mesh ou armature ausente"})
+    mask_files = glob.glob(os.path.join(masks_directory, f"{base_prefix}_mask_*.png"))
+    separated = []
+    for mask_path in mask_files:
+        mask_img = bpy.data.images.load(mask_path)
+        W, H = mask_img.size
+        pixels = list(mask_img.pixels)
+        bpy.context.view_layer.objects.active = main_obj
+        bpy.ops.object.mode_set(mode='EDIT')
+        bm = bmesh.from_edit_mesh(main_obj.data)
+        uv_layer = bm.loops.layers.uv.active
+        if uv_layer is None:
+            bpy.ops.object.mode_set(mode='OBJECT')
+            bpy.data.images.remove(mask_img)
+            continue
+        bpy.ops.mesh.select_all(action='DESELECT')
+        for face in bm.faces:
+            sel = False
+            for loop in face.loops:
+                uv = loop[uv_layer].uv
+                px = min(int(uv.x * W), W - 1)
+                py = min(int(uv.y * H), H - 1)
+                idx = (py * W + px) * 4
+                if pixels[idx] > 0.5 and pixels[idx + 1] > 0.5 and pixels[idx + 2] > 0.5:
+                    sel = True
+                    break
+            if sel:
+                face.select_set(True)
+        bmesh.update_edit_mesh(main_obj.data)
+        if any(f.select for f in bm.faces):
+            bpy.ops.mesh.separate(type='SELECTED')
+            bpy.ops.object.mode_set(mode='OBJECT')
+            acc_obj = [o for o in bpy.context.selected_objects if o != main_obj][-1]
+            acc_obj.name = f"Prop_{os.path.basename(mask_path).replace('.png', '')}"
+            target_bone = find_nearest_bone(acc_obj, arm_obj)
+            acc_obj.vertex_groups.clear()
+            vg = acc_obj.vertex_groups.new(name=target_bone)
+            for v in acc_obj.data.vertices:
+                vg.add([v.index], 1.0, 'REPLACE')
+            separated.append({"obj": acc_obj.name, "bone": target_bone})
+            bpy.context.view_layer.objects.active = main_obj
+        else:
+            bpy.ops.object.mode_set(mode='OBJECT')
+        bpy.data.images.remove(mask_img)
+    return json.dumps({"status": "OK", "separated": separated})
