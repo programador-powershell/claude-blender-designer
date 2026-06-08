@@ -88,21 +88,11 @@ if not dress:
     print('NO_DRESS'); raise SystemExit
 
 # Build bone_name -> color lookup (e tambem prefix matches)
-bone_color = {{}}
-piece_z_color = []
 items = sorted(palette.items(), key=lambda kv: kv[1].get('order', 99))
-# Higher order = outer = wins. Iterate from outer to inner so first match = outer.
-for name, info in reversed(items):
-    bone = info['bone']; color = info['color']; z = info['z']
-    bone_color[bone] = color  # later overwrite = inner wins for bone match
-    piece_z_color.append((z[0], z[1], color, bone, info.get('order',0)))
-# Override: outer (high order) for bone lookup
-for name, info in items:
-    bone_color[info['bone']] = info['color']
-# Z list ordered outer-first
-piece_z_color.sort(key=lambda t: -t[4])
-print(f'bones in palette: {{len(bone_color)}}')
-print(f'z order (outer first): {{[(round(t[0],2), round(t[1],2), t[4]) for t in piece_z_color[:8]]}}')
+# pieces_list = (bone, z0, z1, color, order, name)
+pieces_list = [(info['bone'], info['z'][0], info['z'][1], info['color'],
+                info.get('order',0), name) for name, info in items]
+print(f'pieces total: {{len(pieces_list)}}')
 
 # Per vertex: find dominant bone -> color. Fallback z-range matching.
 mesh = dress.data
@@ -113,30 +103,36 @@ vcol = mesh.vertex_colors.active
 
 # Build vertex -> dominant bone
 vg_index_to_name = {{vg.index: vg.name for vg in dress.vertex_groups}}
-default_color = (0.5, 0.5, 0.5, 1.0)
-painted = 0
-fallback = 0
+# Per vertex: find pieces matching (bone match + z range). Pick LOWEST order (outer wins for SAME body region).
+# Wait - SMALLEST z_range (most specific) prevalece. Use ordem decrescente order pra outer wins.
+painted_bone = 0; painted_z = 0; painted_default = 0
 loop_idx = 0
 for poly in mesh.polygons:
     for vi in poly.vertices:
         v = mesh.vertices[vi]
-        best_w = 0; best_name = None
+        wz = (dress.matrix_world @ v.co).z
+        # Best bone
+        best_w = 0; best_bone = None
         for g in v.groups:
             if g.weight > best_w:
-                best_w = g.weight; best_name = vg_index_to_name.get(g.group)
-        col = bone_color.get(best_name)
-        if not col:
-            # z-range fallback
-            wz = (dress.matrix_world @ v.co).z
-            for t in piece_z_color:
-                z0, z1, c = t[0], t[1], t[2]
-                if z0 <= wz <= z1:
-                    col = c; fallback += 1; break
-        if not col: col = (0.5, 0.5, 0.5)
-        else: painted += 1
+                best_w = g.weight; best_bone = vg_index_to_name.get(g.group)
+        # Find best piece: prefer bone+z match w/ HIGHEST order. Fallback z-only w/ smallest range.
+        candidates_bone_z = [p for p in pieces_list if p[0] == best_bone and p[1] <= wz <= p[2]]
+        candidates_z = [p for p in pieces_list if p[1] <= wz <= p[2]]
+        col = None
+        if candidates_bone_z:
+            # Highest order = outer
+            best = max(candidates_bone_z, key=lambda p: p[4])
+            col = best[3]; painted_bone += 1
+        elif candidates_z:
+            # Smallest z_range = most specific piece pra essa z
+            best = min(candidates_z, key=lambda p: p[2] - p[1])
+            col = best[3]; painted_z += 1
+        else:
+            col = (0.5, 0.5, 0.5); painted_default += 1
         vcol.data[loop_idx].color = (col[0], col[1], col[2], 1.0)
         loop_idx += 1
-print(f'painted={{painted}} fallback_z={{fallback}}')
+print(f'painted bone+z={{painted_bone}} z_only={{painted_z}} default={{painted_default}}')
 
 # Material: vertex color -> Base Color
 mat = bpy.data.materials.get('Painted_Dress') or bpy.data.materials.new('Painted_Dress')
