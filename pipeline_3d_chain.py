@@ -42,6 +42,64 @@ def comfy_get(path):
     return json.loads(urllib.request.urlopen(COMFY+path, timeout=60).read())
 
 
+_NODE_SCHEMA_CACHE = {}
+def _get_node_schema(class_type):
+    if class_type in _NODE_SCHEMA_CACHE: return _NODE_SCHEMA_CACHE[class_type]
+    try:
+        r = json.loads(urllib.request.urlopen(COMFY+f"/object_info/{class_type}", timeout=10).read())
+        info = r.get(class_type, {})
+        _NODE_SCHEMA_CACHE[class_type] = info
+        return info
+    except Exception: return {}
+
+
+def ui_to_api_workflow(ui_wf):
+    """Convert ComfyUI UI workflow -> API format, usando /object_info pra mapear widgets."""
+    nodes = ui_wf.get('nodes', [])
+    links = ui_wf.get('links', [])
+    link_map = {}
+    for L in links:
+        if isinstance(L, list) and len(L) >= 6:
+            link_map[L[0]] = (str(L[1]), int(L[2]))
+    api = {}
+    for n in nodes:
+        nid = str(n['id'])
+        class_type = n['type']
+        api[nid] = {"class_type": class_type, "inputs": {}}
+        schema = _get_node_schema(class_type)
+        input_order = (schema.get('input_order', {}).get('required', []) +
+                       schema.get('input_order', {}).get('optional', []))
+        required = schema.get('input', {}).get('required', {})
+        optional = schema.get('input', {}).get('optional', {})
+        all_input_defs = {**required, **optional}
+        # Map linked inputs first
+        linked_names = set()
+        for inp in n.get('inputs', []):
+            iname = inp.get('name'); ilink = inp.get('link')
+            if ilink is not None and ilink in link_map:
+                src_id, src_slot = link_map[ilink]
+                api[nid]['inputs'][iname] = [src_id, src_slot]
+                linked_names.add(iname)
+        # Map widget values aligned with input_order
+        # IMPORTANT: widgets_values preserves order including for linked inputs (UI default override)
+        # So consume widget for EVERY widget-type input regardless of link, then overwrite if linked
+        widgets = list(n.get('widgets_values', []))
+        for iname in input_order:
+            if iname not in all_input_defs: continue
+            type_def = all_input_defs[iname]
+            type_id = type_def[0] if isinstance(type_def, list) else type_def
+            # Determine if this is widget-type input
+            is_widget = (isinstance(type_id, list)  # COMBO
+                          or (isinstance(type_id, str)
+                              and type_id in ('STRING', 'INT', 'FLOAT', 'BOOLEAN')))
+            if is_widget and widgets:
+                v = widgets.pop(0)
+                if iname not in linked_names:
+                    api[nid]['inputs'][iname] = v
+            # if linked, value already set above; ignore widget
+    return api
+
+
 def trellis2_image_to_mesh(image_path, out_name, workflow_path=TRELLIS_WF):
     """Run Trellis2 workflow: image -> .glb mesh."""
     if not os.path.exists(workflow_path):
@@ -50,15 +108,32 @@ def trellis2_image_to_mesh(image_path, out_name, workflow_path=TRELLIS_WF):
     os.makedirs(COMFY_IN, exist_ok=True)
     name = os.path.basename(image_path)
     shutil.copy2(image_path, os.path.join(COMFY_IN, name))
-    wf = json.load(open(workflow_path, encoding='utf-8'))
-    # Patch LoadImage node to use our image
+    raw_wf = json.load(open(workflow_path, encoding='utf-8'))
+    # Detect format: UI has 'nodes' list, API has dict node_id -> {class_type}
+    if 'nodes' in raw_wf and isinstance(raw_wf['nodes'], list):
+        wf = ui_to_api_workflow(raw_wf)
+    else:
+        wf = {k:v for k,v in raw_wf.items() if not k.startswith('_')}
+    # Patch LoadImage node + save prefix
     for node_id, node in wf.items():
-        if isinstance(node, dict) and node.get('class_type') == 'LoadImage':
+        if not isinstance(node, dict): continue
+        ct = node.get('class_type','')
+        if ct == 'LoadImage':
             node['inputs']['image'] = name
-        if isinstance(node, dict) and 'Save' in node.get('class_type','') and 'GLB' in node.get('class_type','').upper():
+        if ct == 'Trellis2ExportMesh' or 'Save' in ct or 'Export' in ct:
             node['inputs']['filename_prefix'] = f"trellis_{out_name}"
-    # Strip non-node keys
-    wf = {k:v for k,v in wf.items() if not k.startswith('_')}
+            if ct == 'Trellis2ExportMesh':
+                node['inputs']['file_format'] = 'glb'
+        if ct == 'PrimitiveString' and 'value' in node.get('inputs', {}):
+            # Filename string nodes -> override
+            if isinstance(node['inputs'].get('value'), str) and len(node['inputs']['value']) < 100:
+                node['inputs']['value'] = f"trellis_{out_name}"
+    # Debug: dump API workflow
+    debug_path = os.path.join(MESH_DIR, f"{out_name}_api_debug.json")
+    json.dump(wf, open(debug_path,'w',encoding='utf-8'), indent=2)
+    export_nodes = [(k,v.get('class_type'),v.get('inputs')) for k,v in wf.items()
+                     if isinstance(v,dict) and 'Export' in v.get('class_type','')]
+    print(f"  [Trellis2] export nodes in API: {export_nodes}")
     r = comfy_post("/prompt", {"prompt": wf, "client_id": f"trellis_{out_name}"})
     pid = r["prompt_id"]
     print(f"  [Trellis2] prompt_id={pid}")
@@ -72,13 +147,23 @@ def trellis2_image_to_mesh(image_path, out_name, workflow_path=TRELLIS_WF):
             if st.get('status_str')=='error':
                 print(f"  [Trellis2 ERR] {st}"); return None
         time.sleep(10)
-    # Find generated GLB
+    # Find generated GLB: try history outputs first, fallback scan output dir
     glb_files = []
     for node_id, node_out in h[pid].get('outputs',{}).items():
-        for fmt in ['gltf', 'glb']:
+        for fmt in ['gltf', 'glb', 'mesh', 'ui']:
             if fmt in node_out:
-                for g in node_out[fmt]:
-                    glb_files.append(os.path.join(COMFY_OUT, g.get('subfolder',''), g['filename']))
+                items = node_out[fmt] if isinstance(node_out[fmt], list) else [node_out[fmt]]
+                for g in items:
+                    if isinstance(g, dict) and 'filename' in g:
+                        glb_files.append(os.path.join(COMFY_OUT, g.get('subfolder',''), g['filename']))
+    if not glb_files:
+        # Scan output dir + subfolders for recent .glb matching prefix
+        import glob as _glob
+        for pat in [f"3D/*{out_name}*.glb", f"3D/Trellis2*.glb", f"*{out_name}*.glb", f"trellis_{out_name}*.glb"]:
+            found = _glob.glob(os.path.join(COMFY_OUT, pat), recursive=True)
+            if found:
+                found.sort(key=os.path.getmtime, reverse=True)
+                glb_files = [found[0]]; break
     if not glb_files: print(f"  [Trellis2] no GLB output"); return None
     src = glb_files[0]
     dst = os.path.join(MESH_DIR, f"{out_name}.glb")
