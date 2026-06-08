@@ -77,6 +77,18 @@ def save_status(st):
 
 
 def gen_mesh_hf(crop_path, out_name, max_tries=2):
+    # Try TripoSR local first (no rate limit). HF Space as fallback.
+    try:
+        import triposr_local
+        out = os.path.join(MESH_DIR, f"{out_name}.glb")
+        print(f"  [TripoSR local] gen...")
+        r = triposr_local.image_to_mesh(crop_path, out_name, mc_resolution=192)
+        if r and os.path.exists(r):
+            print(f"  [TripoSR OK] -> {r}")
+            return r
+    except Exception as e:
+        print(f"  [TripoSR err] {str(e)[:200]}")
+    # Fallback HF Spaces
     last_err = None
     for space_id, fn in SPACE_FUNCS:
         for attempt in range(1, max_tries+1):
@@ -88,12 +100,10 @@ def gen_mesh_hf(crop_path, out_name, max_tries=2):
                     shutil.copy2(glb_src, dst)
                     print(f"  [HF OK] {space_id} -> {dst}")
                     return dst
-                print(f"  [HF] no GLB output (got: {glb_src})")
             except Exception as e:
                 last_err = str(e)
                 print(f"  [HF err] {space_id}: {last_err[:200]}")
                 time.sleep(3)
-    print(f"  [HF FAIL] last_err: {last_err}")
     return None
 
 
