@@ -1,0 +1,120 @@
+{
+  "source_mesh_name": "AI_Raw_Mold",
+  "body_name": "Alice_Body_Base",
+  "armature_name": "Rig_Alice",
+  "target_height_m": 1.70,
+  "export_path": "",
+  "pieces": [
+    {
+      "piece_id": "petticoat_black_base",
+      "mask": "01_petticoat_black_base.png",
+      "layer_index": 10,
+      "category": "cloth",
+      "target_collection": "PA_03_GARMENT_INNER",
+      "thickness": 0.0015,
+      "shrinkwrap_offset": 0.0015,
+      "transfer_weights": true,
+      "anti_clipping_source": true,
+      "material": "MAT_PA_Fabric_Black"
+    },
+    {
+      "piece_id": "underskirt_cream",
+      "mask": "02_underskirt_cream.png",
+      "layer_index": 20,
+      "category": "cloth",
+      "target_collection": "PA_03_GARMENT_INNER",
+      "thickness": 0.0013,
+      "shrinkwrap_offset": 0.0018,
+      "transfer_weights": true,
+      "material": "MAT_PA_Fabric_Cream"
+    },
+    {
+      "piece_id": "outer_skirt_green_main",
+      "mask": "03_outer_skirt_green_main.png",
+      "layer_index": 30,
+      "category": "cloth",
+      "target_collection": "PA_04_GARMENT_OUTER",
+      "thickness": 0.0015,
+      "shrinkwrap_offset": 0.0020,
+      "transfer_weights": true,
+      "material": "MAT_PA_Fabric_Green_Teal"
+    },
+    {
+      "piece_id": "back_bow_and_train",
+      "mask": "04_back_bow_and_train.png",
+      "layer_index": 40,
+      "category": "semi_rigid",
+      "target_collection": "PA_04_GARMENT_OUTER",
+      "thickness": 0.0015,
+      "shrinkwrap_offset": 0.0025,
+      "transfer_weights": true,
+      "material": "MAT_PA_Fabric_Green_Teal"
+    },
+    {
+      "piece_id": "bodice_base",
+      "mask": "05_bodice_base.png",
+      "layer_index": 50,
+      "category": "cloth",
+      "target_collection": "PA_04_GARMENT_OUTER",
+      "thickness": 0.0015,
+      "shrinkwrap_offset": 0.0020,
+      "transfer_weights": true,
+      "material": "MAT_PA_Fabric_Green_Teal"
+    },
+    {
+      "piece_id": "corset_overlay",
+      "mask": "06_corset_overlay.png",
+      "layer_index": 60,
+      "category": "semi_rigid",
+      "target_collection": "PA_04_GARMENT_OUTER",
+      "thickness": 0.0020,
+      "shrinkwrap_offset": 0.0030,
+      "transfer_weights": true,
+      "material": "MAT_PA_Leather_Black"
+    },
+    {
+      "piece_id": "sleeves_left_right",
+      "mask": "07_sleeves_left_right.png",
+      "layer_index": 70,
+      "category": "cloth",
+      "target_collection": "PA_04_GARMENT_OUTER",
+      "thickness": 0.0012,
+      "shrinkwrap_offset": 0.0020,
+      "transfer_weights": true,
+      "material": "MAT_PA_Fabric_Green_Teal"
+    },
+    {
+      "piece_id": "gloves_and_cuffs",
+      "mask": "08_gloves_and_cuffs.png",
+      "layer_index": 80,
+      "category": "semi_rigid",
+      "target_collection": "PA_05_ACCESSORIES",
+      "thickness": 0.0010,
+      "shrinkwrap_offset": 0.0015,
+      "transfer_weights": true,
+      "material": "MAT_PA_Leather_Black"
+    },
+    {
+      "piece_id": "boots_stockings",
+      "mask": "09_boots_stockings.png",
+      "layer_index": 90,
+      "category": "semi_rigid",
+      "target_collection": "PA_05_ACCESSORIES",
+      "thickness": 0.0018,
+      "shrinkwrap_offset": 0.0010,
+      "transfer_weights": true,
+      "material": "MAT_PA_Leather_Black"
+    },
+    {
+      "piece_id": "rigid_accessories",
+      "mask": "10_rigid_accessories.png",
+      "layer_index": 100,
+      "category": "rigid",
+      "target_collection": "PA_05_ACCESSORIES",
+      "thickness": 0.0,
+      "transfer_weights": false,
+      "material": "MAT_PA_Metal_AntiqueGold"
+    }
+  ],
+  "hair": {"cards": []}
+}
