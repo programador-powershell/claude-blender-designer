@@ -44,6 +44,9 @@ def inspect_image(image_path, layer_name, view):
     """Roda o workflow inspetor 1x e devolve dict de specs + paths das imagens salvas."""
     name = upload(image_path)
     wf = json.load(open(WF_TEMPLATE))
+    # drop comment keys (ComfyUI rejects non-node keys)
+    for k in [k for k in wf if k.startswith("_")]:
+        del wf[k]
     wf["1"]["inputs"]["image"] = name
     # rename SaveImage prefixes para incluir layer+view (saida unica)
     prefix_map = {"20":"lines","21":"shadow","22":"texture","23":"overred","24":"overgreen",

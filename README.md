@@ -1,57 +1,68 @@
-# claude-blender-designer
+# claude-blender-designer — Garment Builder Update
 
-Image -> 3D -> Blender rigged character pipeline.
+Atualização para transformar o projeto em um pipeline de roupa procedural por camadas para Blender.
 
-## Pipelines
+O objetivo desta atualização é complementar o pipeline atual `Image -> 3D -> Blender rigged character` com um segundo pipeline específico para roupa:
 
-| Script | Input | 3D engine | Status |
-|---|---|---|---|
-| `pipeline_hunyuan.py` | front/left/back images | Hunyuan3D-2mv | working |
-| `pipeline_unique3d.py` | front image | Unique3D (multi-view + mesh recon) | install required |
-| `pipeline_orquestrador.py` | front image | TripoSR | install required |
+```text
+Character Pipeline
+imagem base -> corpo/cabeça/cabelo -> rig -> shape keys
 
-## Blender side
-
-`live/game_builder.py` — invoked by the pipeline scripts via `bridge_cmd.py`:
-
-- `auto_process_ai_generated_mesh()` — ingest GLB, normalize to 1.7m, base z=0
-- `build_complete_skeleton()` — full Mixamo-named skeleton incl. fingers, jaw, eyes
-- `apply_skirt_layers_and_weighting()` — 3 tiers x 8 rings x 3 segments, numpy-vectorized weights
-- `inject_secondary_physics_bones()` — breast + butt physics bones with falloff
-- `setup_advanced_finger_constraints()` — anatomical hinge limits per phalange
-- `apply_facial_shape_keys()` — Mouth_Open + Blink_L + Blink_R via vert-coord proximity
-- `apply_vision_details_to_mesh()` — VLM JSON curves -> bump map onto material
-- `execute_ultimate_pipeline()` — dispatcher: SHD skinning -> all of the above
-
-Legacy utilities preserved: `skin_auto`, `shd_launch/finalize`, `surgical_align`,
-`extract_and_fit_clothing`, `snapshot/rollback`, etc.
-
-## Vision (VLM)
-
-`live/vision_ask.py` — single-image / multi-image query against llama.cpp server.
-`live/vision_to_trace.py` — VLM -> JSON {curves:[{label,region,points}]} for bump.
-
-Backend: llama-server (Qwen3-VL 30B GGUF + mmproj) on port 8080.
-
-## Bridge
-
-`claude_bridge.py` — socket bridge inside Blender (port 9877..9881).
-`bridge_cmd.py` — CLI client that ships a Python file to the bridge.
-
-## Usage
-
-```bash
-# Hunyuan path
-python pipeline_hunyuan.py D:/path/to/front.png D:/path/to/left.png D:/path/to/back.png char_name
-
-# Trace bump details via vision
-python live/vision_to_trace.py D:/path/to/art.png D:/out/trace.json
-# then inside Blender (via MCP or bridge):
-# game_builder.apply_vision_details_to_mesh("char_name_Mesh", "D:/out/trace.json")
+Garment Pipeline
+blueprint do vestido -> peças separadas -> tecidos -> costuras -> cloth -> acessórios -> validação
 ```
 
-## Requirements
+## O que foi adicionado
 
-- Blender 4.x or 5.x running with `claude_bridge.py` loaded (or Blender MCP add-on).
-- Python env per pipeline (Hunyuan portable; Unique3D conda env).
-- llama-server with vision-capable GGUF for the VLM trace.
+```text
+live/garment_schema.py              Schema técnico de peças/camadas/acessórios
+live/garment_builder.py             Construtor Blender procedural das roupas
+live/garment_alice_dark_dress.py    Blueprint do vestido da Alice por camadas
+live/vision_to_garment_blueprint.py Conversor VLM -> blueprint técnico de roupa
+live/garment_fit_to_body.py         Ajuste de roupa ao corpo/armature
+live/garment_validation_render.py   Câmeras e validação por renders
+pipeline_garment_builder.py         Pipeline via bridge_cmd.py
+examples/alice_dark_dress_blueprint.json
+```
+
+## Como usar
+
+1. Copie estas pastas para a raiz do seu repositório original `claude-blender-designer`.
+2. Abra o Blender com `claude_bridge.py` rodando.
+3. Execute:
+
+```bash
+python pipeline_garment_builder.py --blueprint examples/alice_dark_dress_blueprint.json --character Alice_Base --outfit Alice_Dark_Dress --validate-render
+```
+
+## Importante
+
+Esta atualização não promete reconstrução perfeita a partir de uma imagem única. Ela muda o projeto para o caminho correto: roupa como **molde/camada/peça/acessório**, com geometria separada, materiais e simulação. Para ficar perfeitamente fiel, cada peça precisa ser refinada por blueprint/manual tracing.
+
+
+---
+
+# Atualização Hair Cards — GodotHair como base conceitual
+
+Este pacote agora inclui um pipeline de cabelo em `hair cards` inspirado no projeto `2Retr0/GodotHair`.
+
+Arquivos principais:
+
+```text
+live/hair_schema.py
+live/hair_card_builder.py
+live/hair_alice_liddell.py
+live/vision_to_hair_blueprint.py
+pipeline_hair_builder.py
+examples/alice_liddell_hair_blueprint.json
+docs/HAIR_PIPELINE_GODOTHAIR_BASE.md
+```
+
+Uso:
+
+```bash
+python pipeline_hair_builder.py --preset alice --save examples/alice_liddell_hair_blueprint.json
+python pipeline_hair_builder.py --blueprint examples/alice_liddell_hair_blueprint.json --build --shot
+```
+
+Observação: o patch **não copia assets do GodotHair**. Ele usa a arquitetura de cabelo por hair cards como referência técnica, com material anisotrópico aproximado no Blender e blueprint procedural para o cabelo da Alice.

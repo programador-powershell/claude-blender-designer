@@ -6,7 +6,7 @@ Unique3D = front-view + auto multi-view + normal-based mesh reconstruction.
 import os, sys, subprocess, tempfile, shutil
 
 UNIQUE_DIR = r"D:/Alice/tools/Unique3D"
-UNIQUE_PY  = r"D:/Alice/tools/Unique3D/unique3d_env/Scripts/python.exe"
+UNIQUE_PY  = r"C:/Users/pslo9/miniconda3/envs/unique3d/python.exe"
 OUT_DIR    = r"D:/Alice/tools/auto-rig-fix/work/generated"
 BRIDGE_CMD = r"D:/Alice/tools/auto-rig-fix/bridge_cmd.py"
 
@@ -21,7 +21,7 @@ front = r"{front}"
 out_glb = r"{out_glb}"
 img = Image.open(front).convert("RGBA")
 print("[unique3d] running generate3dv2 ...")
-ret_mesh, _ = generate3dv2(img, input_processing=True, seed={seed}, render_video=False, do_refine=True)
+ret_mesh, _ = generate3dv2(img, input_processing=True, seed={seed}, render_video=False, do_refine=False)
 print("[unique3d] gen ->", ret_mesh)
 if ret_mesh and os.path.exists(ret_mesh):
     shutil.copy2(ret_mesh, out_glb)

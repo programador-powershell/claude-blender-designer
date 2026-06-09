@@ -1,0 +1,35 @@
+{
+  "name": "claude-blender-designer-garment-update",
+  "files": [
+    "README.md",
+    "docs/GARMENT_PIPELINE.md",
+    "examples/alice_dark_dress_blueprint.json",
+    "install_garment_update.py",
+    "live/__pycache__/garment_alice_dark_dress.cpython-313.pyc",
+    "live/__pycache__/garment_schema.cpython-313.pyc",
+    "live/garment_alice_dark_dress.py",
+    "live/garment_builder.py",
+    "live/garment_fit_to_body.py",
+    "live/garment_schema.py",
+    "live/garment_validation_render.py",
+    "live/vision_to_garment_blueprint.py",
+    "patches/README_PATCH.md",
+    "pipeline_garment_builder.py",
+    "tools/export_alice_dark_dress_blueprint.py"
+  ],
+  "limitation": "pacote de atualização; aplicar sobre o repositório original",
+  "hair_update": {
+    "based_on": "2Retr0/GodotHair concept: hair cards + anisotropic hair shader parameters",
+    "files": [
+      "live/hair_schema.py",
+      "live/hair_card_builder.py",
+      "live/hair_alice_liddell.py",
+      "live/vision_to_hair_blueprint.py",
+      "pipeline_hair_builder.py",
+      "examples/alice_liddell_hair_blueprint.json",
+      "docs/HAIR_PIPELINE_GODOTHAIR_BASE.md",
+      "install_hair_update.py"
+    ],
+    "does_not_bundle_godothair_assets": true
+  }
+}
