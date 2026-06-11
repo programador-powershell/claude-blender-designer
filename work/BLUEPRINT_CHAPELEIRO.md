@@ -31,3 +31,51 @@ S10 cinza-verde adamascado | S11 listras douradas/verde | S12 preto micro-poás
 - Esqueleto: cada osso vs antropometria Drillis-Contini (% altura) + dentro da mesh
 - Cada peça: render região vs crop da imagem da peça (cv2 edge ratio + olho) — NÃO avançar sem bater
 - Final: 3-views vs turnaround + WholeBody 133/133 + cv2 14 faixas
+
+
+---
+
+# CATÁLOGO COMPLETO — D:\References (501 arquivos, indexado 2026-06-11)
+
+## /3D — modelos prontos (64 na raiz + texturas)
+**Personagens GLB (com vestido/outfit):** alice.glb, alice-vestido.glb, alice-chapepeiro.glb (sic), alice-cheshire.glb, alice-coelho.glb, alice-lagarta.glb, alice-rainha.glb, cavaleiro.glb, cavaleiro-vestido.glb, chapeleiro.glb, cheshire.glb, coelho.glb, coelho-vestido.glb, lagarta.glb, lidia.glb, lidia-vestido.glb, lidia-boss-vestido.glb, rainha.glb, soldado.glb, biscoito-mob.glb
+**Skeletal FBX (UE-ready SK_*):** SK_Alice, SK_AliceDress, SK_Alice_Chapeleiro, SK_Alice_Cheshire, SK_Alice_Coelho, SK_Alice_Lagarta, SK_Alice_Rainha, SK_CavaleiroDress, SK_Coelho, SK_Lidia, SK_LidiaBoss, SK_LidiaDress, SK_RainhaDress
+**T-Poses FBX:** Alice, Coelho, Lidia, cavaleiro, chapeleiro, coelho-vestido
+**Mixamo FBX (rigados):** alice, cavaleiro, chapeleiro, cheshire, coelho, coelho-vestido, lagarta, lidia, rainha (+ .fbm com texturas PBR)
+**Armas/Props GLB:** adaga, espadao, faca, foice, cajado, odachi, punhal, bule, carta
+**Texturas PBR (base/mr/normal por pasta _tex):** alice, alice_chapeleiro, alice_cheshire, alice_coelho, alice_lagarta, alice_rainha, alice_vestido, cavaleiro, cavaleiro_vestido, chapeleiro, cheshire, coelho, coelho_vestido, lagarta, lidia, lidia_boss, lidia_vestido, rainha (18 sets)
+**Fotos base:** alice.jpg, cavaleiro.jpg, chapeleiro.jpg, coelho.jpg, lidia.jpg, rainha.jpg
+
+## /img — arte conceitual (145)
+**Model 3D/BASE/** — pacotes de outfit (10 imgs passo-a-passo + turnaround + alice.jpg cada):
+- `Alice chapeleiro/` — 10 ChatGPT (11_05_53-56) + alice-chapeleiro.png (turnaround 3-views) + alice.jpg ← BLUEPRINT acima
+- `alice base/` — 10 ChatGPT (11_25_16-20) + alice-faca-cozinha.png + alice.jpg
+- `alice cheshire/` — 10 ChatGPT (13_36_47-53) + alice-gato.png + alice.jpg
+- `alice coelho/` — 10 ChatGPT (13_26_39-46) + alice.jpg
+- `alice lagarta/` — 10 ChatGPT (13_44_17-23) + alice-lagarta.png + alice.jpg
+- `alice rainha/` — 10 ChatGPT (13_51_24-25) + alice-rainha.png + alice.jpg
+- BASE raiz: alice.jpg, cavaleiro.jpg, chapeleiro.jpg, coelho.jpg, lidia.jpg, rainha.jpg
+- Model 3D raiz: Alice-3D.png, Lidia-3D.png, Lidia_Boss.png
+**Perfil/** (6): alice, arma-inicial, armas, boss-mennores, lidia, lidia-boss
+**cenas/** (17): cena1-15,17,18 (sem 5 e 16) + lidia-boss.png
+**color/** (8): paleta ChatGPT 25/mai 02_36_46-48
+**efeitos/** (4): debuff-skill, obter-skill, rose-drift, transformação-vestido
+
+## /model — rigs e animações de combate (180)
+**Rigs:** SK_Alice.fbx, Alice_Tpose.fbx, Alice_for_mixamo.fbx, Eve.fbx (+Eve.fbm SpacePirate tex), Y Bot.fbx, lidia.fbx
+**anims/** raiz (14): Eve_Attack/Death/Dodge/Hit/Idle/Run/Walk/Skel, Brutal Assassination, Convulsing, Dual Weapon Combo, Fast Run...
+**anims/Great Sword Pack/** (52): draw, attack, blocking, casting, crouching, idle, impact, jump, 180 turn, high spin attack...
+**anims/Pro Sword and Shield Pack/** (55)
+**anims/Pro Longbow Pack/** (40)
+→ Total ~161 animações de combate prontas pra retarget no esqueleto da Alice
+
+## Raiz
+- `roteiro.txt` + `roteiro_apenas_historia.txt` — roteiro do jogo (fonte canônica de armas/lore)
+- `wolrd-map.jpg` (sic) — mapa-múndi (guia do terreno UE5)
+- `logo-gg.png`
+
+## Usos imediatos no pipeline atual
+1. **SK_Alice_Chapeleiro.fbx + alice_chapeleiro_tex/** = versão SKELETAL JÁ EXISTENTE do chapeleiro com PBR (base+mr+normal) — comparar/canibalizar texturas no builder three.js
+2. Pacotes BASE dos outros 5 outfits = mesmos blueprints prontos pra replicar o builder (cheshire, coelho, lagarta, rainha, base)
+3. Anim packs = retarget direto no HRig/GLB (great sword = espadão do roteiro)
+4. color/ = paleta oficial pra calibrar tiles
